@@ -1,35 +1,50 @@
+pub mod backend;
+pub mod client;
+pub mod dotfile;
 pub mod error;
-pub mod mpd;
 pub mod tui;
 
-use crate::mpd::MpdClient;
-use clap::Parser;
 use crossterm::{
-    terminal::{self, ClearType},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
+use dotfile::DotfileSchema;
 use error::AppError;
-use mpd::CliClient;
-use std::io::{self, Write};
-use tui::draw_border;
+use ratatui::{backend::CrosstermBackend, Terminal};
+use std::io;
+use tui::StatefulTui;
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
-    tracing_subscriber::fmt().init();
+    // LOGGING
+    let file_appender =
+        tracing_appender::rolling::never(DotfileSchema::config_path()?.join(".."), "debug.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    tracing_subscriber::fmt()
+        .with_writer(non_blocking)
+        .with_ansi(false)
+        .init();
 
-    let CliClient { addr, port } = CliClient::parse();
-    let addr = format!("{addr}:{port}");
-
-    let mut _client = MpdClient::init(addr).await?;
-
+    // STDOUT INIT
     let mut stdout = io::stdout();
-    stdout.execute(terminal::Clear(ClearType::All))?;
+    stdout.execute(EnterAlternateScreen)?;
+    enable_raw_mode()?;
 
-    draw_border(&stdout)?;
+    // STATES
+    let _dotfile = DotfileSchema::parse()?;
 
-    // NOTE: OK
-    // let _ = _client.command(mpd::MpdCommand::Play(200)).await;
+    let backend = CrosstermBackend::new(io::stdout());
+    let mut terminal = Terminal::new(backend)?;
 
-    stdout.flush()?;
-    Ok(())
+    // MAIN EVENT LOOP
+    let stateful_tui = StatefulTui::default()
+        // experimental flag
+        .load_all()?
+        .run(&mut terminal);
+
+    // STDOUT CLEANUP
+    stdout.execute(LeaveAlternateScreen)?;
+    disable_raw_mode()?;
+
+    Ok(stateful_tui?)
 }

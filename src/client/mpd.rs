@@ -1,19 +1,11 @@
+use super::Playback;
 use crate::error::AppError;
-use clap::{arg, Parser};
 use std::fmt::Debug;
 use tokio::{
     io::{split, AsyncBufReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
     net::{TcpStream, ToSocketAddrs},
 };
 use tracing::{info, instrument};
-
-#[derive(Parser, Debug)]
-pub struct CliClient {
-    #[arg(long)]
-    pub addr: String,
-    #[arg(long)]
-    pub port: u16,
-}
 
 pub struct MpdClient {
     r: BufReader<ReadHalf<TcpStream>>,
@@ -77,11 +69,17 @@ impl MpdClient {
                     return Ok(messages);
                 }
                 (_, true) => {
-                    return Err(AppError::MpdProtocolError(messages, line));
+                    return Err(AppError::MpdProtocol(messages, line));
                 }
             };
         }
 
         Ok(messages)
+    }
+}
+
+impl Playback for MpdClient {
+    fn play(&self) -> Result<(), AppError> {
+        todo!()
     }
 }
