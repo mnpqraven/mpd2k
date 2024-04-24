@@ -1,12 +1,14 @@
 use crate::{backend::utils::is_supported_audio, dotfile::DotfileSchema, error::AppError};
 use audiotags::Tag;
-use tracing::info;
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Debug)]
 pub struct AudioTrack {
     pub name: String,
     pub path: String,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub album_artist: Option<String>,
     pub track_no: Option<u16>,
     _meta: DirEntry,
 }
@@ -30,6 +32,9 @@ pub fn load_all_tracks(config: &DotfileSchema) -> Result<Vec<AudioTrack>, AppErr
             // separate thread
             let tag = Tag::new().read_from_path(path.clone()).unwrap();
             let name = tag.title().unwrap_or(&filename).to_string();
+            let album = tag.album_title().map(|e| e.to_owned());
+            let artist = tag.artist().map(|e| e.to_owned());
+            let album_artist = tag.album_artist().map(|e| e.to_owned());
             let track_no = tag.track_number();
 
             let track = AudioTrack {
@@ -37,6 +42,9 @@ pub fn load_all_tracks(config: &DotfileSchema) -> Result<Vec<AudioTrack>, AppErr
                 path,
                 track_no,
                 _meta: entry,
+                artist,
+                album,
+                album_artist,
             };
 
             tracks.push(track)

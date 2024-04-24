@@ -1,3 +1,5 @@
+#![feature(if_let_guard)]
+
 pub mod backend;
 pub mod client;
 pub mod dotfile;
