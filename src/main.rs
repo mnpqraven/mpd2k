@@ -39,8 +39,9 @@ async fn main() -> Result<(), AppError> {
     // MAIN EVENT LOOP
     let stateful_tui = StatefulTui::default()
         // experimental flag
-        .load_all()?
-        .run(&mut terminal);
+        // .load_all()?
+        .run(&mut terminal)
+        .await;
 
     // STDOUT CLEANUP
     stdout.execute(LeaveAlternateScreen)?;

@@ -1,5 +1,6 @@
-use super::AudioTreeState;
+use super::{AudioTreeState, NavigationRoute, NavigationState};
 use ratatui::{prelude::*, widgets::*};
+use strum::IntoEnumIterator;
 
 // TODO: file refactor
 impl Widget for &AudioTreeState {
@@ -44,5 +45,39 @@ impl Widget for &AudioTreeState {
             })
             .enumerate()
             .for_each(|(index, para)| para.render(song_item_layouts[index], buf));
+    }
+}
+
+impl Widget for &NavigationState {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        let constraints = Vec::from_iter(
+            std::iter::repeat(Constraint::Min(1)).take(NavigationRoute::iter().len()),
+        );
+
+        let container_div = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![Constraint::Percentage(100)])
+            .split(area);
+        Block::new()
+            .borders(Borders::all())
+            .padding(Padding::uniform(1))
+            .render(container_div[0], buf);
+
+        let nav_item_layouts = Layout::default()
+            .direction(Direction::Horizontal)
+            .margin(1)
+            .constraints(constraints)
+            .split(container_div[0]);
+
+        NavigationRoute::iter()
+            .map(|route| match self.current == route {
+                true => Line::from(route.to_string()).centered().black().on_white(),
+                false => Line::from(route.to_string()).centered().white().on_black(),
+            })
+            .enumerate()
+            .for_each(|(index, line)| Paragraph::new(line).render(nav_item_layouts[index], buf))
     }
 }

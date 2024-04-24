@@ -1,8 +1,8 @@
 pub mod event_handlers;
-pub mod playback;
+pub mod render;
 
 use crate::{
-    backend::library::{load_all_tracks, AudioTrack},
+    backend::library::{load_all_tracks, load_all_tracks_async, AudioTrack},
     dotfile::DotfileSchema,
     error::AppError,
 };
@@ -11,13 +11,20 @@ use ratatui::{
     prelude::*,
     widgets::{Block, Borders, Paragraph},
 };
-use std::io::{self, Stdout};
+use std::{
+    io::{self, Stdout},
+    sync::{Arc, Mutex},
+    time::{Instant, SystemTime, UNIX_EPOCH},
+};
+use strum::{Display, EnumIter};
+use tracing::info;
 
 #[derive(Debug, Default)]
 pub struct StatefulTui {
     // TODO: state for tab
-    navigation: NavigationRoute,
-    pub audio_tree: AudioTreeState,
+    pub navigation: NavigationState,
+    pub audio_tree: Arc<Mutex<AudioTreeState>>,
+    loading_lib: Arc<Mutex<bool>>,
     exit: bool,
 }
 
@@ -29,7 +36,12 @@ pub struct AudioTreeState {
 }
 
 #[derive(Debug, Default)]
-enum NavigationRoute {
+pub struct NavigationState {
+    pub current: NavigationRoute,
+}
+
+#[derive(Debug, Default, EnumIter, Display, PartialEq, Eq)]
+pub enum NavigationRoute {
     #[default]
     Playback,
     Config,
@@ -37,7 +49,7 @@ enum NavigationRoute {
 
 pub type Tui = Terminal<CrosstermBackend<Stdout>>;
 
-impl StatefulTui {
+impl Widget for &StatefulTui {
     /// TODO:
     /// ```
     /// // |----------------------|
@@ -48,43 +60,65 @@ impl StatefulTui {
     /// // |             |        |
     /// // |----------------------|
     /// ```
-    pub fn run(&mut self, terminal: &mut Tui) -> io::Result<()> {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        let container_ltr = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![Constraint::Percentage(75), Constraint::Percentage(25)])
+            .split(area);
+        let container_left_ud = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(vec![
+                // 2 for borders + name + prolly shortcut
+                Constraint::Max(4),
+                // fill rest
+                Constraint::Min(10),
+            ])
+            .split(container_ltr[0]);
+
+        // let navbar = Paragraph::new("navbar").block(Block::new().borders(Borders::all()));
+        // let main = Paragraph::new("main").block(Block::new().borders(Borders::all()));
+
+        let loading = self.loading_lib.try_lock().unwrap();
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let sidebar_right = Paragraph::new(format!("{}\nloading: {}", now, loading))
+            .block(Block::new().borders(Borders::all()));
+
+        // NAVBAR
+        self.navigation.render(container_left_ud[0], buf);
+        // frame.render_widget(navbar, container_left_ud[0]);
+        // MAIN BOX
+        match self.audio_tree.try_lock() {
+            Ok(audio_tree) => audio_tree.render(container_left_ud[1], buf),
+            Err(_) => AudioTreeState::default().render(container_left_ud[1], buf),
+        };
+        // frame.render_widget(main, container_ltr[0]);
+        // RIGHT SIDEBAR
+        sidebar_right.render(container_ltr[1], buf);
+    }
+}
+
+impl StatefulTui {
+    pub async fn run(&mut self, terminal: &mut Tui) -> io::Result<()> {
         while !self.exit {
-            terminal.draw(|frame| {
-                let size = frame.size();
+            terminal.draw(|frame| self.render_frame(frame))?;
 
-                let container_ltr = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .constraints(vec![Constraint::Percentage(75), Constraint::Percentage(25)])
-                    .split(size);
-                let container_left_ud = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints(vec![
-                        // 2 for borders + name + prolly shortcut
-                        Constraint::Max(4),
-                        // fill rest
-                        Constraint::Min(10),
-                    ])
-                    .split(container_ltr[0]);
-
-                let navbar = Paragraph::new("navbar").block(Block::new().borders(Borders::all()));
-
-                let sidebar_right =
-                    Paragraph::new("sidebar_right").block(Block::new().borders(Borders::all()));
-
-                // NAVBAR
-                frame.render_widget(navbar, container_left_ud[0]);
-                // MAIN BOX
-                frame.render_widget(&self.audio_tree, container_left_ud[1]);
-                // RIGHT SIDEBAR
-                frame.render_widget(sidebar_right, container_ltr[1]);
-            })?;
-            self.handle_events()?;
+            self.handle_events().await?;
         }
         Ok(())
     }
 
-    fn handle_events(&mut self) -> io::Result<()> {
+    fn render_frame(&self, frame: &mut Frame) {
+        frame.render_widget(self, frame.size());
+    }
+
+    async fn handle_events(&mut self) -> io::Result<()> {
         if event::poll(std::time::Duration::from_millis(16))? {
             match event::read()? {
                 // it's important to check that the event is a key press event as
@@ -104,11 +138,14 @@ impl StatefulTui {
         // universal
         match key_event.code {
             KeyCode::Char('q') => self.exit(),
+            KeyCode::Char('u') => self.update_lib(),
+            KeyCode::Char('1') => self.navigate(NavigationRoute::Playback),
+            KeyCode::Char('2') => self.navigate(NavigationRoute::Config),
             _ => {}
         }
 
         // page-dependent
-        match self.navigation {
+        match self.navigation.current {
             NavigationRoute::Playback => match key_event.code {
                 KeyCode::Char('n') => self.select_next_track(),
                 KeyCode::Char('p') => self.select_prev_track(),
@@ -118,23 +155,44 @@ impl StatefulTui {
         }
     }
 
-    pub fn load_all(&mut self) -> Result<&mut Self, AppError> {
-        let cfg = DotfileSchema::parse().unwrap();
-        self.audio_tree.audio_tracks = load_all_tracks(&cfg)?;
-        Ok(self)
+    fn exit(&mut self) {
+        info!("exit");
+        self.exit = true;
     }
 
-    fn exit(&mut self) {
-        self.exit = true;
+    fn update_lib(&mut self) {
+        // probably wrong
+        let tree_arced = self.audio_tree.clone();
+
+        self.toggle_lib_loading();
+
+        tokio::spawn(async move {
+            let cfg = DotfileSchema::parse().unwrap();
+            let mut audio_tree = tree_arced.lock().unwrap();
+            // TODO: caching
+            audio_tree.audio_tracks = load_all_tracks(&cfg).unwrap();
+        });
+    }
+
+    fn navigate(&mut self, to: NavigationRoute) {
+        self.navigation.current = to
     }
 
     fn select_next_track(&mut self) {
         // TODO: check last
-        self.audio_tree.selected_track_index += 1;
+        let mut audio_tree = self.audio_tree.lock().unwrap();
+        audio_tree.selected_track_index += 1;
     }
+
+    fn toggle_lib_loading(&mut self) {
+        let mut loading = self.loading_lib.try_lock().unwrap();
+        *loading = !*loading;
+    }
+
     fn select_prev_track(&mut self) {
-        if self.audio_tree.selected_track_index > 0 {
-            self.audio_tree.selected_track_index -= 1;
+        let mut audio_tree = self.audio_tree.lock().unwrap();
+        if audio_tree.selected_track_index > 0 {
+            audio_tree.selected_track_index -= 1;
         }
     }
 }

@@ -1,9 +1,12 @@
-
 // TODO: split err
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    #[error("The mutex was poisoned")]
+    PoisonError(String),
+
     #[error(transparent)]
     Walkdir(#[from] walkdir::Error),
 
@@ -11,7 +14,6 @@ pub enum AppError {
     LibraryPlayback(#[from] rodio::PlayError),
     // #[error(transparent)]
     // MpdPlayback,
-
     #[error("This feature is not yet unimplemented")]
     Unimplemented,
     #[error("MPD connection error: {0}")]
@@ -25,3 +27,10 @@ pub enum AppError {
     #[error("Not supported for this platform")]
     NotSupported,
 }
+
+impl<T> From<std::sync::PoisonError<T>> for AppError {
+    fn from(err: std::sync::PoisonError<T>) -> Self {
+        AppError::PoisonError(err.to_string())
+    }
+}
+
