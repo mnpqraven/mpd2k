@@ -18,7 +18,7 @@ use tui::StatefulTui;
 async fn main() -> Result<(), AppError> {
     // LOGGING
     let file_appender =
-        tracing_appender::rolling::never(DotfileSchema::config_path()?.join(".."), "debug.log");
+        tracing_appender::rolling::never(DotfileSchema::config_dir_path()?, "debug.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
     tracing_subscriber::fmt()
         .with_writer(non_blocking)
