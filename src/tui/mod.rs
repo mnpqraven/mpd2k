@@ -8,12 +8,11 @@ use crate::{
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, ListState, Padding, Paragraph},
+    widgets::{Block, Borders, Paragraph, StatefulWidget, TableState, Widget},
 };
 use std::{
     io::{self, Stdout},
     sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
 };
 use strum::{Display, EnumIter};
 
@@ -31,7 +30,7 @@ pub struct AudioTreeState {
     // TODO: migrate this to albums, or convert function
     pub audio_tracks: Vec<AudioTrack>,
     pub selected_track_index: u32,
-    pub tui_state: Arc<Mutex<ListState>>,
+    pub tui_state: Arc<Mutex<TableState>>,
 }
 
 #[derive(Debug, Default)]
@@ -71,69 +70,65 @@ impl Widget for &StatefulTui {
             .direction(Direction::Vertical)
             .constraints(vec![
                 // 2 for borders + name + prolly shortcut
-                Constraint::Max(4),
+                Constraint::Length(3),
                 // fill rest
                 Constraint::Min(10),
             ])
             .split(container_ltr[0]);
 
-        // let navbar = Paragraph::new("navbar").block(Block::new().borders(Borders::all()));
-        // let main = Paragraph::new("main").block(Block::new().borders(Borders::all()));
-
-        let loading = self.loading_lib.try_lock().unwrap();
-
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
-
-        let (sel, id) = match self.audio_tree.try_lock() {
-            Ok(audio_tree_state) => match audio_tree_state.tui_state.try_lock() {
-                Ok(tui) => (
-                    format!("{:?}", tui.selected()),
-                    audio_tree_state.selected_track_index.to_string(),
-                ),
-                Err(_) => ("tui lock fail".to_string(), "same".to_string()),
-            },
-            Err(_) => ("audio_tree lock fail".to_string(), "same".to_string()),
-        };
-
         let sidebar_right =
-            Paragraph::new(format!("{}\nloading: {}\nid: {} {}", now, loading, sel, id))
-                .block(Block::new().borders(Borders::all()));
-
-        drop(sel);
+            Paragraph::new("sidebar right").block(Block::new().borders(Borders::all()));
 
         // NAVBAR
         self.navigation.render(container_left_ud[0], buf);
         // frame.render_widget(navbar, container_left_ud[0]);
         // MAIN BOX
-        let mainbox_area = container_left_ud[1];
-        let container_for_border = Layout::default()
-            .constraints(vec![Constraint::Percentage(100)])
-            .split(mainbox_area);
-        Block::new()
-            .borders(Borders::all())
-            .render(mainbox_area, buf);
+        let mainbox_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+            .split(container_left_ud[1]);
+        let mainbox_left = mainbox_layout[0];
+        let mainbox_right = mainbox_layout[1];
 
-        let mainbox_area_inner = Layout::default()
-            .constraints([Constraint::Percentage(100)].as_ref())
-            .margin(1)
-            .split(container_for_border[0]);
+        // mainbox_left_component.render(area, buf)
 
         match self.audio_tree.try_lock() {
             Ok(audio_tree) if audio_tree.tui_state.try_lock().is_ok() => {
+                let get = audio_tree
+                    .audio_tracks
+                    .get(audio_tree.selected_track_index as usize);
+                let mainbox_left_component = main_left(get);
+                mainbox_left_component.render(mainbox_left, buf);
+
                 let mut state = audio_tree.tui_state.try_lock().unwrap();
-                audio_tree.render(mainbox_area_inner[0], buf, &mut state)
+                audio_tree.render(mainbox_right, buf, &mut state)
             }
             _ => {
-                let mut empty = ListState::default();
-                AudioTreeState::default().render(mainbox_area_inner[0], buf, &mut empty);
+                let mut empty = TableState::default();
+                AudioTreeState::default().render(mainbox_right, buf, &mut empty);
             }
         };
         // frame.render_widget(main, container_ltr[0]);
         // RIGHT SIDEBAR
         sidebar_right.render(container_ltr[1], buf);
+    }
+}
+
+fn main_left<'a>(data: Option<&AudioTrack>) -> Paragraph<'a> {
+    let block = Block::new().borders(Borders::all());
+    match data {
+        None => Paragraph::default().block(block),
+        Some(data) => {
+            let text = vec![
+                Line::from(format!("Album: {}", data.album.clone().unwrap_or_default())),
+                Line::from(format!(
+                    "Album Artist: {}",
+                    data.album_artist.clone().unwrap_or_default()
+                )),
+                Line::from("Year: 2024"),
+            ];
+            Paragraph::new(text).block(block)
+        }
     }
 }
 

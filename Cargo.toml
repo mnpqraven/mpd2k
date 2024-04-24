@@ -14,7 +14,7 @@ clap = { version = "4.5.4", features = ["derive"] }
 crossterm = "0.27.0"
 dirs = "5.0.1"
 futures-lite = "2.3.0"
-ratatui = "0.26.2"
+ratatui = "0.25.0"
 rodio = "0.17.3"
 serde = { version = "1.0.198", features = ["derive"] }
 strum = { version = "0.26.2", features = ["derive"] }
