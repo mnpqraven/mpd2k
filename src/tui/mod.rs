@@ -2,7 +2,7 @@ pub mod event_handlers;
 pub mod render;
 
 use crate::{
-    backend::library::{load_all_tracks, AudioTrack},
+    backend::library::{load_all_tracks, try_load_cache, update_cache, AudioTrack},
     dotfile::DotfileSchema,
 };
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
@@ -25,12 +25,21 @@ pub struct StatefulTui {
     exit: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AudioTreeState {
     // TODO: migrate this to albums, or convert function
     pub audio_tracks: Vec<AudioTrack>,
     pub selected_track_index: u32,
     pub tui_state: Arc<Mutex<TableState>>,
+}
+impl Default for AudioTreeState {
+    fn default() -> Self {
+        Self {
+            audio_tracks: try_load_cache().unwrap(),
+            selected_track_index: Default::default(),
+            tui_state: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -203,7 +212,12 @@ impl StatefulTui {
             let cfg = DotfileSchema::parse().unwrap();
             let mut audio_tree = tree_arced.lock().unwrap();
             // TODO: caching
-            audio_tree.audio_tracks = load_all_tracks(&cfg).unwrap();
+            // audio_tree.audio_tracks = load_all_tracks(&cfg).unwrap();
+
+            // NOTE: caching impl
+            if let Ok(tracks) = update_cache(&cfg) {
+                audio_tree.audio_tracks = tracks;
+            };
 
             let mut loading = loading_arced.lock().unwrap();
             *loading = !*loading;

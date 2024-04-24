@@ -44,6 +44,12 @@ impl DotfileSchema {
             .ok_or(AppError::NoConfig)
     }
 
+    pub fn cache_path() -> Result<PathBuf, AppError> {
+        config_dir()
+            .map(|path| path.join("mpd2k/cache.csv"))
+            .ok_or(AppError::NoConfig)
+    }
+
     pub fn parse() -> Result<Self, AppError> {
         let dotfile_path = Self::config_file_path()?;
         let conf_str = read_to_string(dotfile_path).map_err(|_| AppError::NoConfig)?;
