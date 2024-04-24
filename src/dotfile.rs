@@ -99,7 +99,7 @@ mod tests {
 
         assert_eq!(config_dir, "C\\Users\\mnpqr\\AppData\\Roaming\\mpd2k");
         assert_eq!(
-            config_dir,
+            config_file,
             "C\\Users\\mnpqr\\AppData\\Roaming\\mpd2k\\config.toml"
         );
 

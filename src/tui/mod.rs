@@ -2,7 +2,7 @@ pub mod event_handlers;
 pub mod render;
 
 use crate::{
-    backend::library::{load_all_tracks, try_load_cache, update_cache, AudioTrack},
+    backend::library::{try_load_cache, update_cache, AudioTrack},
     dotfile::DotfileSchema,
 };
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
