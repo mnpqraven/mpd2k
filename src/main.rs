@@ -14,7 +14,7 @@ use dotfile::DotfileSchema;
 use error::AppError;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
-use tui::StatefulTui;
+use tui::types::StatefulTui;
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {

@@ -1,16 +1,33 @@
-use std::{fs::File, io::BufReader};
-
 use super::Playback;
-use crate::backend::library::AudioTrack;
+use crate::backend::library::{cache::try_load_cache, AudioTrack};
+use ratatui::widgets::TableState;
 use rodio::{Decoder, OutputStream, Source};
+use std::{
+    fs::File,
+    io::BufReader,
+    sync::{Arc, Mutex},
+};
 
+#[derive(Debug)]
 pub struct LibraryClient {
-    tracks: Vec<AudioTrack>,
+    pub audio_tracks: Vec<AudioTrack>,
+    pub selected_track_index: u32,
+    pub tui_state: Arc<Mutex<TableState>>,
+}
+
+impl Default for LibraryClient {
+    fn default() -> Self {
+        Self {
+            audio_tracks: try_load_cache().unwrap_or_default(),
+            selected_track_index: Default::default(),
+            tui_state: Default::default(),
+        }
+    }
 }
 
 impl Playback for LibraryClient {
     fn play(&self) -> Result<(), crate::error::AppError> {
-        let track = self.tracks.first().unwrap();
+        let track = self.audio_tracks.first().unwrap();
 
         // Get a output stream handle to the default physical sound device
         let (_stream, stream_handle) = OutputStream::try_default().unwrap();

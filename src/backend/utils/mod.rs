@@ -29,3 +29,11 @@ pub fn is_supported_audio<T: AsRef<Path>>(path: T) -> bool {
         None => false,
     }
 }
+
+/// this function converts empty string to None
+pub fn empty_to_option<T: std::str::FromStr + std::default::Default>(text: &str) -> Option<T> {
+    match text.is_empty() {
+        true => None,
+        false => Some(text.parse::<T>().unwrap_or_default()),
+    }
+}

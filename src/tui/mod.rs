@@ -1,57 +1,12 @@
-pub mod event_handlers;
+use self::types::*;
+use crate::{backend::library::cache::update_cache, dotfile::DotfileSchema};
+use crossterm::event::{self, *};
+use ratatui::prelude::*;
+use std::io::{self};
+
+mod event_handlers;
 pub mod render;
-
-use crate::{
-    backend::library::{try_load_cache, update_cache, AudioTrack},
-    dotfile::DotfileSchema,
-};
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
-use ratatui::{prelude::*, widgets::TableState};
-use std::{
-    io::{self, Stdout},
-    sync::{Arc, Mutex},
-};
-use strum::{Display, EnumIter};
-
-#[derive(Debug, Default)]
-pub struct StatefulTui {
-    // TODO: state for tab
-    pub navigation: NavigationState,
-    pub audio_tree: Arc<Mutex<AudioTreeState>>,
-    loading_lib: Arc<Mutex<bool>>,
-    exit: bool,
-}
-
-#[derive(Debug)]
-pub struct AudioTreeState {
-    // TODO: migrate this to albums, or convert function
-    pub audio_tracks: Vec<AudioTrack>,
-    pub selected_track_index: u32,
-    pub tui_state: Arc<Mutex<TableState>>,
-}
-impl Default for AudioTreeState {
-    fn default() -> Self {
-        Self {
-            audio_tracks: try_load_cache().unwrap_or_default(),
-            selected_track_index: Default::default(),
-            tui_state: Default::default(),
-        }
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct NavigationState {
-    pub current: NavigationRoute,
-}
-
-#[derive(Debug, Default, EnumIter, Display, PartialEq, Eq)]
-pub enum NavigationRoute {
-    #[default]
-    Playback,
-    Config,
-}
-
-pub type Tui = Terminal<CrosstermBackend<Stdout>>;
+pub mod types;
 
 impl StatefulTui {
     pub async fn run(&mut self, terminal: &mut Tui) -> io::Result<()> {
@@ -115,7 +70,7 @@ impl StatefulTui {
 
     fn update_lib(&mut self) {
         // probably wrong
-        let tree_arced = self.audio_tree.clone();
+        let tree_arced = self.library_tree.clone();
         let loading_arced = self.loading_lib.clone();
 
         self.toggle_lib_loading();
@@ -148,7 +103,7 @@ impl StatefulTui {
 
     fn select_next_track(&mut self) {
         // TODO: check last
-        let mut audio_tree = self.audio_tree.lock().unwrap();
+        let mut audio_tree = self.library_tree.lock().unwrap();
         let max = audio_tree.audio_tracks.len();
         if audio_tree.selected_track_index + 1 < max.try_into().unwrap() {
             audio_tree.selected_track_index += 1;
@@ -159,7 +114,7 @@ impl StatefulTui {
     }
 
     fn select_prev_track(&mut self) {
-        let mut audio_tree = self.audio_tree.lock().unwrap();
+        let mut audio_tree = self.library_tree.lock().unwrap();
         if audio_tree.selected_track_index > 0 {
             audio_tree.selected_track_index -= 1;
 
