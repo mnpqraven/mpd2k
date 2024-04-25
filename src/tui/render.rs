@@ -1,6 +1,98 @@
-use super::{AudioTreeState, NavigationRoute, NavigationState};
+use crate::backend::library::AudioTrack;
+
+use super::{AudioTreeState, NavigationRoute, NavigationState, StatefulTui};
 use ratatui::{prelude::*, widgets::*};
+use std::time::{SystemTime, UNIX_EPOCH};
 use strum::IntoEnumIterator;
+
+impl Widget for &StatefulTui {
+    /// TODO:
+    /// ```
+    /// // |----------------------|
+    /// // |    navbar   |        |
+    /// // |-------------|        |
+    /// // |             |  track |
+    /// // |   maindex   |  info  |
+    /// // |             |        |
+    /// // |----------------------|
+    /// ```
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        let container_ltr = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![Constraint::Percentage(75), Constraint::Percentage(25)])
+            .split(area);
+        let container_left_ud = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(vec![
+                // 2 for borders + name + prolly shortcut
+                Constraint::Length(3),
+                // fill rest
+                Constraint::Min(10),
+            ])
+            .split(container_ltr[0]);
+
+        let clock = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let sidebar_right = Paragraph::new(format!("sidebar right\n{clock}"))
+            .block(Block::new().borders(Borders::all()));
+
+        // NAVBAR
+        self.navigation.render(container_left_ud[0], buf);
+        // frame.render_widget(navbar, container_left_ud[0]);
+        // MAIN BOX
+        let mainbox_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+            .split(container_left_ud[1]);
+        let mainbox_left = mainbox_layout[0];
+        let mainbox_right = mainbox_layout[1];
+
+        // mainbox_left_component.render(area, buf)
+
+        match self.audio_tree.try_lock() {
+            Ok(audio_tree) if audio_tree.tui_state.try_lock().is_ok() => {
+                let get = audio_tree
+                    .audio_tracks
+                    .get(audio_tree.selected_track_index as usize);
+                let mainbox_left_component = main_left(get);
+                mainbox_left_component.render(mainbox_left, buf);
+
+                let mut state = audio_tree.tui_state.try_lock().unwrap();
+                audio_tree.render(mainbox_right, buf, &mut state)
+            }
+            _ => {
+                let mut empty = TableState::default();
+                AudioTreeState::default().render(mainbox_right, buf, &mut empty);
+            }
+        };
+        // frame.render_widget(main, container_ltr[0]);
+        // RIGHT SIDEBAR
+        sidebar_right.render(container_ltr[1], buf);
+    }
+}
+
+fn main_left<'a>(data: Option<&AudioTrack>) -> Paragraph<'a> {
+    let block = Block::new().borders(Borders::all());
+    match data {
+        None => Paragraph::default().block(block),
+        Some(data) => {
+            let text = vec![
+                Line::from(format!("Album: {}", data.album.clone().unwrap_or_default())),
+                Line::from(format!(
+                    "Album Artist: {}",
+                    data.album_artist.clone().unwrap_or_default()
+                )),
+                Line::from("Year: 2024"),
+            ];
+            Paragraph::new(text).block(block)
+        }
+    }
+}
 
 // TODO: file refactor
 impl StatefulWidget for &AudioTreeState {

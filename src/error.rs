@@ -3,6 +3,8 @@
 pub enum AppError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Csv(#[from] csv::Error),
 
     #[error("The mutex was poisoned")]
     PoisonError(String),
@@ -10,6 +12,8 @@ pub enum AppError {
     #[error(transparent)]
     Walkdir(#[from] walkdir::Error),
 
+    #[error(transparent)]
+    LibraryMetadata(#[from] audiotags::Error),
     #[error(transparent)]
     LibraryPlayback(#[from] rodio::PlayError),
     // #[error(transparent)]
@@ -33,4 +37,3 @@ impl<T> From<std::sync::PoisonError<T>> for AppError {
         AppError::PoisonError(err.to_string())
     }
 }
-

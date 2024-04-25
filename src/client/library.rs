@@ -1,25 +1,11 @@
 use std::{fs::File, io::BufReader};
 
 use super::Playback;
-use crate::{
-    backend::library::{load_all_tracks, AudioTrack},
-    dotfile::DotfileSchema,
-    error::AppError,
-};
+use crate::backend::library::AudioTrack;
 use rodio::{Decoder, OutputStream, Source};
-use tracing::instrument;
 
 pub struct LibraryClient {
     tracks: Vec<AudioTrack>,
-}
-
-impl LibraryClient {
-    #[instrument]
-    pub async fn init() -> Result<Self, AppError> {
-        let cfg = DotfileSchema::parse().unwrap();
-        let tracks = load_all_tracks(&cfg)?;
-        Ok(Self { tracks })
-    }
 }
 
 impl Playback for LibraryClient {
@@ -46,14 +32,4 @@ impl Playback for LibraryClient {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::LibraryClient;
-    use crate::client::Playback;
-
-    #[tokio::test]
-    async fn playback() {
-        let lib_client = LibraryClient::init().await.unwrap();
-        lib_client.play().unwrap();
-        assert_eq!(1, 2)
-    }
-}
+mod tests {}
