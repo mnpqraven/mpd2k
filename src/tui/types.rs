@@ -7,11 +7,11 @@ use std::{
 use strum::{Display, EnumIter};
 
 #[derive(Debug, Default)]
-pub struct StatefulTui {
+pub struct AppState {
     // TODO: state for tab
     pub navigation: NavigationState,
-    pub library_tree: Arc<Mutex<LibraryClient>>,
-    pub loading_lib: Arc<Mutex<bool>>,
+    pub library_client: Arc<Mutex<LibraryClient>>,
+    pub library_loading: Arc<Mutex<bool>>,
     pub exit: bool,
 }
 

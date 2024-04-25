@@ -1,4 +1,6 @@
 use self::types::*;
+use crate::client::library::LibraryClient;
+use crate::client::Playback;
 use crate::{backend::library::cache::update_cache, dotfile::DotfileSchema};
 use crossterm::event::{self, *};
 use ratatui::prelude::*;
@@ -8,12 +10,12 @@ mod event_handlers;
 pub mod render;
 pub mod types;
 
-impl StatefulTui {
-    pub async fn run(&mut self, terminal: &mut Tui) -> io::Result<()> {
+impl AppState {
+    pub fn run(&mut self, terminal: &mut Tui) -> io::Result<()> {
         while !self.exit {
             terminal.draw(|frame| self.render_frame(frame))?;
 
-            self.handle_events().await?;
+            self.handle_events()?;
         }
         Ok(())
     }
@@ -22,7 +24,7 @@ impl StatefulTui {
         frame.render_widget(self, frame.size());
     }
 
-    async fn handle_events(&mut self) -> io::Result<()> {
+    fn handle_events(&mut self) -> io::Result<()> {
         if event::poll(std::time::Duration::from_millis(16))? {
             match event::read()? {
                 // it's important to check that the event is a key press event as
@@ -43,7 +45,12 @@ impl StatefulTui {
         match key_event.code {
             KeyCode::Char('q') => self.exit(),
             KeyCode::Char('u') => {
-                if self.loading_lib.try_lock().is_ok_and(|loading| !*loading) {
+                // not loading
+                if self
+                    .library_loading
+                    .try_lock()
+                    .is_ok_and(|loading| !*loading)
+                {
                     self.update_lib()
                 }
             }
@@ -58,6 +65,7 @@ impl StatefulTui {
             NavigationRoute::Playback => match key_event.code {
                 KeyCode::Char('n') => self.select_next_track(),
                 KeyCode::Char('p') => self.select_prev_track(),
+                KeyCode::Char('o') => self.play(),
                 _ => {}
             },
             NavigationRoute::Config => {}
@@ -70,10 +78,10 @@ impl StatefulTui {
 
     fn update_lib(&mut self) {
         // probably wrong
-        let tree_arced = self.library_tree.clone();
-        let loading_arced = self.loading_lib.clone();
+        let tree_arced = self.library_client.clone();
+        let loading_arced = self.library_loading.clone();
 
-        self.toggle_lib_loading();
+        self.toggle_loading();
 
         tokio::spawn(async move {
             let cfg = DotfileSchema::parse().unwrap();
@@ -96,30 +104,52 @@ impl StatefulTui {
         self.navigation.current = to
     }
 
-    fn toggle_lib_loading(&mut self) {
-        let mut loading = self.loading_lib.try_lock().unwrap();
+    fn toggle_loading(&mut self) {
+        let mut loading = self.library_loading.try_lock().unwrap();
         *loading = !*loading;
+    }
+
+    fn play(&mut self) {
+        let lib_arc = self.library_client.clone();
+        tokio::spawn(async move {
+            let lib = lib_arc.lock().unwrap();
+            let tui_state = lib.tui_state.lock().unwrap();
+
+            let index = tui_state.selected().unwrap();
+            let track = lib.audio_tracks.get(index).unwrap();
+
+            drop(tui_state);
+            // FIX: this causes blocking
+            // till the song is over
+            lib.play(Some(track)).unwrap();
+        });
     }
 
     fn select_next_track(&mut self) {
         // TODO: check last
-        let mut audio_tree = self.library_tree.lock().unwrap();
+        let audio_tree = self.library_client.lock().unwrap();
         let max = audio_tree.audio_tracks.len();
-        if audio_tree.selected_track_index + 1 < max.try_into().unwrap() {
-            audio_tree.selected_track_index += 1;
-
-            let mut tui = audio_tree.tui_state.lock().unwrap();
-            *tui.selected_mut() = Some(audio_tree.selected_track_index.try_into().unwrap());
+        let mut tui_state = audio_tree.tui_state.lock().unwrap();
+        match tui_state.selected() {
+            Some(index) => {
+                if index + 1 < max {
+                    tui_state.select(Some(index + 1));
+                }
+            }
+            None => tui_state.select(Some(0)),
         }
     }
 
     fn select_prev_track(&mut self) {
-        let mut audio_tree = self.library_tree.lock().unwrap();
-        if audio_tree.selected_track_index > 0 {
-            audio_tree.selected_track_index -= 1;
-
-            let mut tui = audio_tree.tui_state.lock().unwrap();
-            *tui.selected_mut() = Some(audio_tree.selected_track_index.try_into().unwrap());
+        let audio_tree = self.library_client.lock().unwrap();
+        let mut tui_state = audio_tree.tui_state.lock().unwrap();
+        match tui_state.selected() {
+            Some(index) => {
+                if index > 1 {
+                    tui_state.select(Some(index - 1))
+                }
+            }
+            None => tui_state.select(Some(0)),
         }
     }
 }

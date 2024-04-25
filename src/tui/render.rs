@@ -1,10 +1,10 @@
-use super::{NavigationRoute, NavigationState, StatefulTui};
+use super::{NavigationRoute, NavigationState, AppState};
 use crate::{backend::library::AudioTrack, client::library::LibraryClient};
 use ratatui::{prelude::*, widgets::*};
 use std::time::{SystemTime, UNIX_EPOCH};
 use strum::IntoEnumIterator;
 
-impl Widget for &StatefulTui {
+impl Widget for &AppState {
     /// TODO:
     /// ```
     /// // |----------------------|
@@ -53,16 +53,18 @@ impl Widget for &StatefulTui {
 
         // mainbox_left_component.render(area, buf)
 
-        match self.library_tree.try_lock() {
+        match self.library_client.try_lock() {
             Ok(audio_tree) if audio_tree.tui_state.try_lock().is_ok() => {
-                let get = audio_tree
-                    .audio_tracks
-                    .get(audio_tree.selected_track_index as usize);
+                let tui_state = audio_tree.tui_state.lock().unwrap();
+                let get = tui_state
+                    .selected()
+                    .and_then(|e| audio_tree.audio_tracks.get(e));
+                drop(tui_state);
                 let mainbox_left_component = main_left(get);
                 mainbox_left_component.render(mainbox_left, buf);
 
-                let mut state = audio_tree.tui_state.try_lock().unwrap();
-                audio_tree.render(mainbox_right, buf, &mut state)
+                let mut tui_state = audio_tree.tui_state.try_lock().unwrap();
+                audio_tree.render(mainbox_right, buf, &mut tui_state)
             }
             _ => {
                 let mut empty = TableState::default();

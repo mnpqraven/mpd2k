@@ -1,4 +1,4 @@
-use super::Playback;
+use super::{PlayableAudio, Playback};
 use crate::backend::library::{cache::try_load_cache, AudioTrack};
 use ratatui::widgets::TableState;
 use rodio::{Decoder, OutputStream, Source};
@@ -7,32 +7,32 @@ use std::{
     io::BufReader,
     sync::{Arc, Mutex},
 };
+use tracing::info;
 
 #[derive(Debug)]
 pub struct LibraryClient {
     pub audio_tracks: Vec<AudioTrack>,
-    pub selected_track_index: u32,
     pub tui_state: Arc<Mutex<TableState>>,
 }
 
 impl Default for LibraryClient {
     fn default() -> Self {
+        info!("running default");
         Self {
             audio_tracks: try_load_cache().unwrap_or_default(),
-            selected_track_index: Default::default(),
+            // selected_track_index: Default::default(),
             tui_state: Default::default(),
         }
     }
 }
 
 impl Playback for LibraryClient {
-    fn play(&self) -> Result<(), crate::error::AppError> {
-        let track = self.audio_tracks.first().unwrap();
-
+    fn play(&self, track: Option<impl PlayableAudio>) -> Result<(), crate::error::AppError> {
         // Get a output stream handle to the default physical sound device
         let (_stream, stream_handle) = OutputStream::try_default().unwrap();
         // Load a sound from a file, using a path relative to Cargo.toml
-        let file = BufReader::new(File::open(&track.path).unwrap());
+        // TODO: safe unwrap
+        let file = BufReader::new(File::open(track.unwrap().path()).unwrap());
         // Decode that sound file into a source
         let source = Decoder::new(file).unwrap();
         // TODO: safe unwrap

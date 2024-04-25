@@ -14,7 +14,7 @@ use dotfile::DotfileSchema;
 use error::AppError;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
-use tui::types::StatefulTui;
+use tui::types::AppState;
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
@@ -27,6 +27,9 @@ async fn main() -> Result<(), AppError> {
         .with_ansi(false)
         .init();
 
+    let mut stateful_tui = AppState::default();
+
+    // WARN: DATA NEEDS TO BE INIT BEFORE THIS (stateful_tui)
     // STDOUT INIT
     let mut stdout = io::stdout();
     stdout.execute(EnterAlternateScreen)?;
@@ -39,15 +42,11 @@ async fn main() -> Result<(), AppError> {
     let mut terminal = Terminal::new(backend)?;
 
     // MAIN EVENT LOOP
-    let stateful_tui = StatefulTui::default()
-        // experimental flag
-        // .load_all()?
-        .run(&mut terminal)
-        .await;
+    let run = stateful_tui.run(&mut terminal);
 
     // STDOUT CLEANUP
-    stdout.execute(LeaveAlternateScreen)?;
     disable_raw_mode()?;
+    stdout.execute(LeaveAlternateScreen)?;
 
-    Ok(stateful_tui?)
+    Ok(run?)
 }

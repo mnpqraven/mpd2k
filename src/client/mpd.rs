@@ -1,4 +1,4 @@
-use super::Playback;
+use super::{PlayableAudio, Playback};
 use crate::error::AppError;
 use std::fmt::Debug;
 use tokio::{
@@ -79,7 +79,8 @@ impl MpdClient {
 }
 
 impl Playback for MpdClient {
-    fn play(&self) -> Result<(), AppError> {
+    // track is always none, we use mpd bindings
+    fn play(&self, _track: Option<impl PlayableAudio>) -> Result<(), AppError> {
         todo!()
     }
 }

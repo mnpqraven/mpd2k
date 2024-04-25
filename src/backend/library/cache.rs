@@ -41,10 +41,12 @@ pub fn update_cache(
     tree_arc: Arc<Mutex<LibraryClient>>,
 ) -> Result<Vec<AudioTrack>, AppError> {
     info!("update_cache");
+    let cache_path = DotfileSchema::cache_path()?;
+    std::fs::remove_file(&cache_path)?;
+
     match load_all_tracks_incremental(config, tree_arc) {
         Ok(tracks) => {
             // write
-            let cache_path = DotfileSchema::cache_path()?;
             let mut writer = csv::WriterBuilder::new()
                 .from_path(cache_path)
                 .map_err(|_| AppError::BadConfig)?;

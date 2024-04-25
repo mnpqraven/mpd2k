@@ -1,11 +1,15 @@
 use crate::error::AppError;
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 
 pub mod library;
 pub mod mpd;
 
+pub trait PlayableAudio {
+    fn path(&self) -> PathBuf;
+}
+
 pub trait Playback {
-    fn play(&self) -> Result<(), AppError>;
+    fn play(&self, audio: Option<impl PlayableAudio>) -> Result<(), AppError>;
     // TODO: pause
     // stop
     // queue next
