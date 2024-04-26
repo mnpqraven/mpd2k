@@ -1,7 +1,7 @@
 use super::types::*;
 use crate::{
     backend::library::cache::update_cache,
-    client::{Playback, PlaybackClient},
+    client::{library::LibraryClient, PlaybackEvent},
     dotfile::DotfileSchema,
 };
 use crossterm::{
@@ -9,7 +9,11 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::prelude::*;
-use std::io::{self, stdout};
+use std::{
+    io::{self, stdout},
+    sync::{Arc, Mutex},
+};
+use tokio::sync::mpsc::UnboundedSender;
 
 /// Initialize the terminal
 pub fn init() -> io::Result<Tui> {
@@ -26,9 +30,13 @@ pub fn teardown() -> io::Result<()> {
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
         Self {
-            ..Default::default()
+            playback_tx,
+            navigation: NavigationState::default(),
+            library_client: Arc::new(Mutex::new(LibraryClient::default())),
+            library_loading: Arc::new(Mutex::new(bool::default())),
+            exit: bool::default(),
         }
     }
 
@@ -47,15 +55,7 @@ impl AppState {
 
         tokio::spawn(async move {
             let cfg = DotfileSchema::parse().unwrap();
-            // let mut audio_tree = tree_arced.lock().unwrap();
-            // TODO: caching
-            // audio_tree.audio_tracks = load_all_tracks(&cfg).unwrap();
-
-            // NOTE: caching impl
             let _ = update_cache(&cfg, tree_arced).await.unwrap();
-            // if let Ok(tracks) = update_cache(&cfg, tree_arced) {
-            //     audio_tree.audio_tracks = tracks;
-            // };
 
             let mut loading = loading_arced.lock().unwrap();
             *loading = !*loading;
@@ -72,19 +72,15 @@ impl AppState {
     }
 
     pub fn play(&mut self) {
-        // let lib_arc = self.library_client.clone();
-        // tokio::spawn(async move {
-        //     let lib = lib_arc.lock().unwrap();
-        //     let tui_state = lib.tui_state.lock().unwrap();
-        //
-        //     let index = tui_state.selected().unwrap();
-        //     let track = lib.audio_tracks.get(index).unwrap().clone();
-        //
-        //     drop(tui_state);
-        //     drop(lib);
-        //     // TODO: centralized thread
-        //     PlaybackClient::_play(Some(&track)).unwrap();
-        // });
+        let lib = self.library_client.lock().unwrap();
+        let tui_state = lib.tui_state.lock().unwrap();
+
+        let index = tui_state.selected().unwrap();
+
+        let track_path = &lib.audio_tracks.get(index).unwrap().path;
+        let _ = self
+            .playback_tx
+            .send(PlaybackEvent::Play(track_path.to_string()));
     }
 
     pub fn select_next_track(&mut self) {
@@ -100,6 +96,10 @@ impl AppState {
             }
             None => tui_state.select(Some(0)),
         }
+    }
+
+    pub fn pause_unpause(&mut self) {
+        let _ = self.playback_tx.send(PlaybackEvent::Pause);
     }
 
     pub fn select_prev_track(&mut self) {

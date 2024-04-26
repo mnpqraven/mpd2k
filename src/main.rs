@@ -6,14 +6,11 @@ pub mod dotfile;
 pub mod error;
 pub mod tui;
 
-use core::panic;
-
-use client::{handle_playback_event, PlaybackClient, PlaybackEvent};
+use client::{PlaybackEvent, PlaybackServer};
 use dotfile::DotfileSchema;
 use error::AppError;
 use ratatui::{backend::CrosstermBackend, Terminal};
-use tokio::{runtime::Handle, sync::oneshot};
-use tracing::info;
+use tokio::runtime::Builder;
 use tui::{
     app::{self},
     events::{Event, EventHandler},
@@ -33,7 +30,13 @@ async fn main() -> Result<(), AppError> {
         .with_ansi(false)
         .init();
 
-    let mut app = AppState::new();
+    // PLAYBACK SERVER setup
+    let playback_rt = Builder::new_current_thread().build().unwrap();
+    let playback_handle = playback_rt.handle().to_owned();
+    let mut playback_server = PlaybackServer::new(playback_handle);
+
+    let playback_tx = playback_server.sender.clone();
+    let mut app = AppState::new(playback_tx.clone());
     // WARN: DATA NEEDS TO BE INIT BEFORE THIS (stateful_tui)
     // STDOUT INIT
     let backend = CrosstermBackend::new(std::io::stderr());
@@ -42,8 +45,6 @@ async fn main() -> Result<(), AppError> {
     #[allow(non_snake_case)]
     let TICK_RATE = 16;
     let events = EventHandler::new(TICK_RATE);
-    let mut playback_events = PlaybackClient::new();
-    let playback_tx = playback_events.sender.clone();
     let mut tui = Tui::new(terminal, events);
 
     tui.init()?;
@@ -57,15 +58,17 @@ async fn main() -> Result<(), AppError> {
                 app.tick();
                 let _ = playback_tx.send(PlaybackEvent::Tick);
             }
-            Event::Key(key_event) => handle_key_events(key_event, &mut app, playback_tx.clone())?,
+            Event::Key(key_event) => handle_key_events(key_event, &mut app)?,
             Event::Mouse(_) => {}
             Event::Resize(_, _) => {}
         }
 
-        playback_events.handle(&mut app).await?;
+        // playback_server.handle(&mut app).await?;
+        playback_server.handle_events()?;
     }
 
     // STDOUT CLEANUP
+    playback_rt.shutdown_background();
     app::teardown()?;
 
     Ok(())

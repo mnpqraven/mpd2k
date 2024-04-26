@@ -1,6 +1,5 @@
 use self::events::EventHandler;
 use self::types::AppState;
-use crate::client::PlaybackClient;
 use crate::error::AppError;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};

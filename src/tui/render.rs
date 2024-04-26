@@ -27,9 +27,12 @@ impl Widget for &AppState {
             .direction(Direction::Vertical)
             .constraints(vec![
                 // 2 for borders + name + prolly shortcut
+                // top navigation bar
                 Constraint::Length(3),
                 // fill rest
                 Constraint::Min(10),
+                // bottom playback bar
+                Constraint::Length(3),
             ])
             .split(container_ltr[0]);
 
@@ -64,7 +67,9 @@ impl Widget for &AppState {
                 mainbox_left_component.render(mainbox_left, buf);
 
                 let mut tui_state = audio_tree.tui_state.try_lock().unwrap();
-                audio_tree.render(mainbox_right, buf, &mut tui_state)
+                audio_tree.render(mainbox_right, buf, &mut tui_state);
+
+                playback_bottom(get, container_left_ud[2], buf);
             }
             _ => {
                 let mut empty = TableState::default();
@@ -93,6 +98,47 @@ fn main_left<'a>(data: Option<&AudioTrack>) -> Paragraph<'a> {
             Paragraph::new(text).block(block)
         }
     }
+}
+
+fn playback_bottom(data: Option<&AudioTrack>, area: Rect, buf: &mut Buffer) {
+    let block = Block::new().borders(Borders::all());
+    let layout = Layout::new(
+        Direction::Horizontal,
+        [
+            Constraint::Min(10),
+            Constraint::Length(8),
+            Constraint::Max(20),
+        ],
+    )
+    .margin(1)
+    .split(area);
+    block.render(area, buf);
+
+    let symbol_elapsed = Span::raw(">");
+    let symbol_empty = Span::raw("-");
+    let playback_line_width = layout[0].width;
+    // TODO: math out rendering logic for elapsed duration
+    let playback_line = match data {
+        Some(_) => {
+            Vec::from_iter(std::iter::repeat(symbol_empty).take(playback_line_width as usize))
+        }
+        None => Vec::from_iter(std::iter::repeat(symbol_empty).take(playback_line_width as usize)),
+    };
+
+    let line = Line::from(playback_line);
+
+    let volume = Line::from("100%").alignment(Alignment::Right);
+    let status = Line::from(vec![" Rep ".into(), " Loop ".into(), " Upd ".into()])
+        .alignment(Alignment::Right);
+    Paragraph::new(line).render(layout[0], buf);
+    Paragraph::new(volume)
+        .block(
+            Block::new()
+                .borders(Borders::LEFT | Borders::RIGHT)
+                .padding(Padding::horizontal(1)),
+        )
+        .render(layout[1], buf);
+    Paragraph::new(status).render(layout[2], buf);
 }
 
 // TODO: file refactor

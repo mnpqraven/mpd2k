@@ -5,8 +5,11 @@ use crate::{
     error::AppError,
 };
 use audiotags::Tag;
+use rodio::Decoder;
 use std::{
-    path::PathBuf,
+    fs::File,
+    io::BufReader,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 use walkdir::WalkDir;
@@ -94,6 +97,12 @@ pub fn sort_library(tracks: &mut [AudioTrack]) -> Result<(), AppError> {
         (item.album_artist.clone(), item.album.clone(), item.track_no)
     });
     Ok(())
+}
+
+pub fn create_source<P: AsRef<Path>>(path: P) -> Result<Decoder<BufReader<File>>, AppError> {
+    let file = BufReader::new(File::open(path)?);
+    let source = Decoder::new(file).unwrap();
+    Ok(source)
 }
 
 #[cfg(test)]
