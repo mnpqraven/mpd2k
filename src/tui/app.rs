@@ -1,5 +1,9 @@
 use super::types::*;
-use crate::{backend::library::cache::update_cache, client::Playback, dotfile::DotfileSchema};
+use crate::{
+    backend::library::cache::update_cache,
+    client::{Playback, PlaybackClient},
+    dotfile::DotfileSchema,
+};
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -22,6 +26,12 @@ pub fn teardown() -> io::Result<()> {
 }
 
 impl AppState {
+    pub fn new() -> Self {
+        Self {
+            ..Default::default()
+        }
+    }
+
     pub fn tick(&self) {}
 
     pub fn exit(&mut self) {
@@ -62,19 +72,19 @@ impl AppState {
     }
 
     pub fn play(&mut self) {
-        let lib_arc = self.library_client.clone();
-        tokio::spawn(async move {
-            let lib = lib_arc.lock().unwrap();
-            let tui_state = lib.tui_state.lock().unwrap();
-
-            let index = tui_state.selected().unwrap();
-            let track = lib.audio_tracks.get(index).unwrap();
-
-            drop(tui_state);
-            // FIX: this causes blocking
-            // till the song is over
-            lib.play(Some(track)).unwrap();
-        });
+        // let lib_arc = self.library_client.clone();
+        // tokio::spawn(async move {
+        //     let lib = lib_arc.lock().unwrap();
+        //     let tui_state = lib.tui_state.lock().unwrap();
+        //
+        //     let index = tui_state.selected().unwrap();
+        //     let track = lib.audio_tracks.get(index).unwrap().clone();
+        //
+        //     drop(tui_state);
+        //     drop(lib);
+        //     // TODO: centralized thread
+        //     PlaybackClient::_play(Some(&track)).unwrap();
+        // });
     }
 
     pub fn select_next_track(&mut self) {

@@ -1,4 +1,4 @@
-use crate::client::library::LibraryClient;
+use crate::client::{library::LibraryClient, PlaybackClient};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{
     io::Stdout,

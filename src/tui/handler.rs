@@ -1,9 +1,15 @@
 use super::types::*;
-use crate::error::AppError;
+use crate::{client::PlaybackEvent, error::AppError};
 use crossterm::event::{KeyCode, KeyEvent};
+use tokio::sync::mpsc::UnboundedSender;
+use tracing::info;
 
 /// Handles the key events and updates the state of [`AppState`].
-pub fn handle_key_events(key_event: KeyEvent, app: &mut AppState) -> Result<(), AppError> {
+pub fn handle_key_events(
+    key_event: KeyEvent,
+    app: &mut AppState,
+    playback_tx: UnboundedSender<PlaybackEvent>,
+) -> Result<(), AppError> {
     // universal
     match key_event.code {
         KeyCode::Char('q') => app.exit(),
@@ -28,7 +34,11 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut AppState) -> Result<(), 
         NavigationRoute::Playback => match key_event.code {
             KeyCode::Char('n') => app.select_next_track(),
             KeyCode::Char('p') => app.select_prev_track(),
-            KeyCode::Char('o') => app.play(),
+            KeyCode::Char('o') => {
+                app.play();
+                let play = playback_tx.send(PlaybackEvent::Play);
+                info!("sending play command {:?}", play);
+            }
             _ => {}
         },
         NavigationRoute::Config => {}

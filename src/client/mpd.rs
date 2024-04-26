@@ -83,4 +83,8 @@ impl Playback for MpdClient {
     fn play(&self, _track: Option<impl PlayableAudio>) -> Result<(), AppError> {
         todo!()
     }
+
+    fn _play(audio: Option<impl PlayableAudio>) -> Result<(), AppError> {
+        todo!()
+    }
 }

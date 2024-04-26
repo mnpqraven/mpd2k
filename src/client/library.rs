@@ -46,6 +46,10 @@ impl Playback for LibraryClient {
 
         Ok(())
     }
+
+    fn _play(audio: Option<impl PlayableAudio>) -> Result<(), crate::error::AppError> {
+        todo!()
+    }
 }
 
 #[cfg(test)]
