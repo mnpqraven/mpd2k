@@ -13,9 +13,13 @@ use tracing::info;
 /// try to read from csv cache, else load directly from dir
 pub fn try_load_cache() -> Result<Vec<AudioTrack>, AppError> {
     info!("try_load_cache");
+    let file_path = DotfileSchema::cache_path()?;
+    if !file_path.exists() {
+        return Ok(Vec::new());
+    }
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(false)
-        .from_path(DotfileSchema::cache_path()?)?;
+        .from_path(file_path)?;
     Ok(rdr
         .records()
         .map(|record| {
@@ -36,13 +40,14 @@ pub fn try_load_cache() -> Result<Vec<AudioTrack>, AppError> {
 /// TODO: hashing files
 /// compare hash to see if a file has changed its metadata and needs to be
 /// updated
-pub fn update_cache(
+pub async fn update_cache(
     config: &DotfileSchema,
     tree_arc: Arc<Mutex<LibraryClient>>,
 ) -> Result<Vec<AudioTrack>, AppError> {
-    info!("update_cache");
     let cache_path = DotfileSchema::cache_path()?;
-    std::fs::remove_file(&cache_path)?;
+    if cache_path.exists() {
+        tokio::fs::remove_file(&cache_path).await?;
+    }
 
     match load_all_tracks_incremental(config, tree_arc) {
         Ok(tracks) => {
@@ -62,6 +67,7 @@ pub fn update_cache(
                 ];
                 writer.write_record(as_bytes).unwrap();
             });
+            info!("update_cache complete");
             Ok(tracks)
         }
         Err(e) => Err(e),

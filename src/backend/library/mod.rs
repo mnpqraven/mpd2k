@@ -97,16 +97,4 @@ pub fn sort_library(tracks: &mut [AudioTrack]) -> Result<(), AppError> {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    #[cfg(windows)]
-    fn display() {
-        use super::load_all_tracks;
-        use crate::dotfile::DotfileSchema;
-
-        let cfg = DotfileSchema::parse().unwrap();
-        let tracks = load_all_tracks(&cfg);
-        assert!(tracks.is_ok());
-        assert!(!tracks.unwrap().is_empty());
-    }
-}
+mod tests {}

@@ -1,155 +1,83 @@
-use self::types::*;
-use crate::client::library::LibraryClient;
-use crate::client::Playback;
-use crate::{backend::library::cache::update_cache, dotfile::DotfileSchema};
-use crossterm::event::{self, *};
-use ratatui::prelude::*;
-use std::io::{self};
+use self::events::EventHandler;
+use self::types::AppState;
+use crate::error::AppError;
+use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
+use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
+use ratatui::backend::Backend;
+use ratatui::Terminal;
+use std::io;
+use std::panic;
 
-mod event_handlers;
+pub mod app;
+pub mod events;
+pub mod handler;
 pub mod render;
 pub mod types;
 
-impl AppState {
-    pub fn run(&mut self, terminal: &mut Tui) -> io::Result<()> {
-        while !self.exit {
-            terminal.draw(|frame| self.render_frame(frame))?;
+/// Representation of a terminal user interface.
+///
+/// It is responsible for setting up the terminal,
+/// initializing the interface and handling the draw events.
+#[derive(Debug)]
+pub struct Tui<B: Backend> {
+    /// Interface to the Terminal.
+    terminal: Terminal<B>,
+    /// Terminal event handler.
+    pub events: EventHandler,
+}
 
-            self.handle_events()?;
-        }
+impl<B: Backend> Tui<B> {
+    /// Constructs a new instance of [`Tui`].
+    pub fn new(terminal: Terminal<B>, events: EventHandler) -> Self {
+        Self { terminal, events }
+    }
+
+    /// Initializes the terminal interface.
+    ///
+    /// It enables the raw mode and sets terminal properties.
+    pub fn init(&mut self) -> Result<(), AppError> {
+        terminal::enable_raw_mode()?;
+        crossterm::execute!(io::stderr(), EnterAlternateScreen, EnableMouseCapture)?;
+
+        // Define a custom panic hook to reset the terminal properties.
+        // This way, you won't have your terminal messed up if an unexpected error happens.
+        let panic_hook = panic::take_hook();
+        panic::set_hook(Box::new(move |panic| {
+            Self::reset().expect("failed to reset the terminal");
+            panic_hook(panic);
+        }));
+
+        self.terminal.hide_cursor()?;
+        self.terminal.clear()?;
         Ok(())
     }
 
-    fn render_frame(&self, frame: &mut Frame) {
-        frame.render_widget(self, frame.size());
-    }
-
-    fn handle_events(&mut self) -> io::Result<()> {
-        if event::poll(std::time::Duration::from_millis(16))? {
-            match event::read()? {
-                // it's important to check that the event is a key press event as
-                // crossterm also emits key release and repeat events on Windows.
-                Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                    self.handle_key_event(key_event)
-                }
-                _ => {}
-            }
-        }
-
+    /// [`Draw`] the terminal interface by [`rendering`] the widgets.
+    ///
+    /// [`Draw`]: ratatui::Terminal::draw
+    /// [`rendering`]: crate::ui::render
+    pub fn draw(&mut self, app: &mut AppState) -> Result<(), AppError> {
+        self.terminal
+            .draw(|frame| frame.render_widget(&*app, frame.size()))?;
         Ok(())
     }
 
-    // TODO: context
-    fn handle_key_event(&mut self, key_event: KeyEvent) {
-        // universal
-        match key_event.code {
-            KeyCode::Char('q') => self.exit(),
-            KeyCode::Char('u') => {
-                // not loading
-                if self
-                    .library_loading
-                    .try_lock()
-                    .is_ok_and(|loading| !*loading)
-                {
-                    self.update_lib()
-                }
-            }
-
-            KeyCode::Char('1') => self.navigate(NavigationRoute::Playback),
-            KeyCode::Char('2') => self.navigate(NavigationRoute::Config),
-            _ => {}
-        }
-
-        // page-dependent
-        match self.navigation.current {
-            NavigationRoute::Playback => match key_event.code {
-                KeyCode::Char('n') => self.select_next_track(),
-                KeyCode::Char('p') => self.select_prev_track(),
-                KeyCode::Char('o') => self.play(),
-                _ => {}
-            },
-            NavigationRoute::Config => {}
-        }
+    /// Resets the terminal interface.
+    ///
+    /// This function is also used for the panic hook to revert
+    /// the terminal properties if unexpected errors occur.
+    fn reset() -> Result<(), AppError> {
+        terminal::disable_raw_mode()?;
+        crossterm::execute!(io::stderr(), LeaveAlternateScreen, DisableMouseCapture)?;
+        Ok(())
     }
 
-    fn exit(&mut self) {
-        self.exit = true;
-    }
-
-    fn update_lib(&mut self) {
-        // probably wrong
-        let tree_arced = self.library_client.clone();
-        let loading_arced = self.library_loading.clone();
-
-        self.toggle_loading();
-
-        tokio::spawn(async move {
-            let cfg = DotfileSchema::parse().unwrap();
-            // let mut audio_tree = tree_arced.lock().unwrap();
-            // TODO: caching
-            // audio_tree.audio_tracks = load_all_tracks(&cfg).unwrap();
-
-            // NOTE: caching impl
-            let _ = update_cache(&cfg, tree_arced);
-            // if let Ok(tracks) = update_cache(&cfg, tree_arced) {
-            //     audio_tree.audio_tracks = tracks;
-            // };
-
-            let mut loading = loading_arced.lock().unwrap();
-            *loading = !*loading;
-        });
-    }
-
-    fn navigate(&mut self, to: NavigationRoute) {
-        self.navigation.current = to
-    }
-
-    fn toggle_loading(&mut self) {
-        let mut loading = self.library_loading.try_lock().unwrap();
-        *loading = !*loading;
-    }
-
-    fn play(&mut self) {
-        let lib_arc = self.library_client.clone();
-        tokio::spawn(async move {
-            let lib = lib_arc.lock().unwrap();
-            let tui_state = lib.tui_state.lock().unwrap();
-
-            let index = tui_state.selected().unwrap();
-            let track = lib.audio_tracks.get(index).unwrap();
-
-            drop(tui_state);
-            // FIX: this causes blocking
-            // till the song is over
-            lib.play(Some(track)).unwrap();
-        });
-    }
-
-    fn select_next_track(&mut self) {
-        // TODO: check last
-        let audio_tree = self.library_client.lock().unwrap();
-        let max = audio_tree.audio_tracks.len();
-        let mut tui_state = audio_tree.tui_state.lock().unwrap();
-        match tui_state.selected() {
-            Some(index) => {
-                if index + 1 < max {
-                    tui_state.select(Some(index + 1));
-                }
-            }
-            None => tui_state.select(Some(0)),
-        }
-    }
-
-    fn select_prev_track(&mut self) {
-        let audio_tree = self.library_client.lock().unwrap();
-        let mut tui_state = audio_tree.tui_state.lock().unwrap();
-        match tui_state.selected() {
-            Some(index) => {
-                if index > 1 {
-                    tui_state.select(Some(index - 1))
-                }
-            }
-            None => tui_state.select(Some(0)),
-        }
+    /// Exits the terminal interface.
+    ///
+    /// It disables the raw mode and reverts back the terminal properties.
+    pub fn exit(&mut self) -> Result<(), AppError> {
+        Self::reset()?;
+        self.terminal.show_cursor()?;
+        Ok(())
     }
 }

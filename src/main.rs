@@ -6,15 +6,16 @@ pub mod dotfile;
 pub mod error;
 pub mod tui;
 
-use crossterm::{
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-    ExecutableCommand,
-};
 use dotfile::DotfileSchema;
 use error::AppError;
 use ratatui::{backend::CrosstermBackend, Terminal};
-use std::io;
-use tui::types::AppState;
+use tui::{
+    app::{self},
+    events::{Event, EventHandler},
+    handler::handle_key_events,
+    types::AppState,
+    Tui,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
@@ -27,26 +28,33 @@ async fn main() -> Result<(), AppError> {
         .with_ansi(false)
         .init();
 
-    let mut stateful_tui = AppState::default();
-
+    let mut app = AppState::default();
     // WARN: DATA NEEDS TO BE INIT BEFORE THIS (stateful_tui)
     // STDOUT INIT
-    let mut stdout = io::stdout();
-    stdout.execute(EnterAlternateScreen)?;
-    enable_raw_mode()?;
+    let backend = CrosstermBackend::new(std::io::stderr());
+    let terminal = Terminal::new(backend)?;
+    // 60 fps
+    let events = EventHandler::new(16);
+    let mut tui = Tui::new(terminal, events);
 
-    // STATES
-    let _dotfile = DotfileSchema::parse()?;
+    tui.init()?;
 
-    let backend = CrosstermBackend::new(io::stdout());
-    let mut terminal = Terminal::new(backend)?;
+    while !app.exit {
+        tui.draw(&mut app)?;
+
+        match tui.events.next().await? {
+            Event::Tick => app.tick(),
+            Event::Key(key_event) => handle_key_events(key_event, &mut app)?,
+            Event::Mouse(_) => {}
+            Event::Resize(_, _) => {}
+        }
+    }
 
     // MAIN EVENT LOOP
-    let run = stateful_tui.run(&mut terminal);
+    // let run = app.run(&mut terminal);
 
     // STDOUT CLEANUP
-    disable_raw_mode()?;
-    stdout.execute(LeaveAlternateScreen)?;
+    app::teardown()?;
 
-    Ok(run?)
+    Ok(())
 }

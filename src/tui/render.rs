@@ -1,4 +1,4 @@
-use super::{NavigationRoute, NavigationState, AppState};
+use super::types::{AppState, NavigationRoute, NavigationState};
 use crate::{backend::library::AudioTrack, client::library::LibraryClient};
 use ratatui::{prelude::*, widgets::*};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -7,13 +7,13 @@ use strum::IntoEnumIterator;
 impl Widget for &AppState {
     /// TODO:
     /// ```
-    /// // |----------------------|
-    /// // |    navbar   |        |
-    /// // |-------------|        |
-    /// // |             |  track |
-    /// // |   maindex   |  info  |
-    /// // |             |        |
-    /// // |----------------------|
+    /// // |-------------------------------|
+    /// // |        navbar        |        |
+    /// // |----------------------|        |
+    /// // |      |               |  track |
+    /// // | info |     maindex   |  info  |
+    /// // |      |               |        |
+    /// // |------------------------------|
     /// ```
     fn render(self, area: Rect, buf: &mut Buffer)
     where
