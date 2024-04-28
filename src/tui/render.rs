@@ -1,7 +1,10 @@
 use super::types::{AppState, NavigationRoute, NavigationState};
 use crate::{backend::library::AudioTrack, client::library::LibraryClient};
 use ratatui::{prelude::*, widgets::*};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::MutexGuard,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use strum::IntoEnumIterator;
 
 impl Widget for &AppState {
@@ -13,7 +16,9 @@ impl Widget for &AppState {
     /// // |      |               |  track |
     /// // | info |     maindex   |  info  |
     /// // |      |               |        |
-    /// // |------------------------------|
+    /// // |-------------------------------|
+    /// // | seek bar | dur | opt |        |
+    /// // |-------------------------------|
     /// ```
     fn render(self, area: Rect, buf: &mut Buffer)
     where
@@ -26,7 +31,6 @@ impl Widget for &AppState {
         let container_left_ud = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
-                // 2 for borders + name + prolly shortcut
                 // top navigation bar
                 Constraint::Length(3),
                 // fill rest
@@ -38,10 +42,9 @@ impl Widget for &AppState {
 
         let clock = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_millis();
-        let sidebar_right = Paragraph::new(format!("sidebar right\n{clock}"))
-            .block(Block::new().borders(Borders::all()));
+        let is_loading = self.library_client.lock().map(|e| e.loading).unwrap();
 
         // NAVBAR
         self.navigation.render(container_left_ud[0], buf);
@@ -58,33 +61,39 @@ impl Widget for &AppState {
 
         match self.library_client.try_lock() {
             Ok(audio_tree) if audio_tree.tui_state.try_lock().is_ok() => {
-                let tui_state = audio_tree.tui_state.lock().unwrap();
-                let get = tui_state
-                    .selected()
-                    .and_then(|e| audio_tree.audio_tracks.get(e));
-                drop(tui_state);
-                let mainbox_left_component = main_left(get);
-                mainbox_left_component.render(mainbox_left, buf);
+                let lookup_fn = |e: MutexGuard<TableState>| {
+                    e.selected().and_then(|f| audio_tree.audio_tracks.get(f))
+                };
+                let track = audio_tree.tui_state.lock().map(lookup_fn).unwrap();
 
                 let mut tui_state = audio_tree.tui_state.try_lock().unwrap();
                 audio_tree.render(mainbox_right, buf, &mut tui_state);
 
-                playback_bottom(get, container_left_ud[2], buf);
+                MainBoxLeft(track, mainbox_left, buf);
+
+                PlaybackBottom(
+                    track,
+                    audio_tree.current_track_duration,
+                    audio_tree.volume_percentage(),
+                    container_left_ud[2],
+                    buf,
+                );
             }
             _ => {
                 let mut empty = TableState::default();
                 LibraryClient::default().render(mainbox_right, buf, &mut empty);
             }
         };
-        // frame.render_widget(main, container_ltr[0]);
+
         // RIGHT SIDEBAR
-        sidebar_right.render(container_ltr[1], buf);
+        SidebarRight(clock, is_loading, container_ltr[1], buf);
     }
 }
 
-fn main_left<'a>(data: Option<&AudioTrack>) -> Paragraph<'a> {
+#[allow(non_snake_case)]
+fn MainBoxLeft(data: Option<&AudioTrack>, area: Rect, buf: &mut Buffer) {
     let block = Block::new().borders(Borders::all());
-    match data {
+    let paragraph = match data {
         None => Paragraph::default().block(block),
         Some(data) => {
             let text = vec![
@@ -97,15 +106,24 @@ fn main_left<'a>(data: Option<&AudioTrack>) -> Paragraph<'a> {
             ];
             Paragraph::new(text).block(block)
         }
-    }
+    };
+    paragraph.render(area, buf)
 }
 
-fn playback_bottom(data: Option<&AudioTrack>, area: Rect, buf: &mut Buffer) {
+#[allow(non_snake_case)]
+fn PlaybackBottom(
+    data: Option<&AudioTrack>,
+    dur: Option<Duration>,
+    volume_percentage: u8,
+    area: Rect,
+    buf: &mut Buffer,
+) {
     let block = Block::new().borders(Borders::all());
     let layout = Layout::new(
         Direction::Horizontal,
         [
             Constraint::Min(10),
+            Constraint::Length(17),
             Constraint::Length(8),
             Constraint::Max(20),
         ],
@@ -127,18 +145,45 @@ fn playback_bottom(data: Option<&AudioTrack>, area: Rect, buf: &mut Buffer) {
 
     let line = Line::from(playback_line);
 
-    let volume = Line::from("100%").alignment(Alignment::Right);
+    let duration = Line::from(format!("0:00 / {}", timestamp(&dur))).alignment(Alignment::Right);
+    let volume = Line::from(format!("{} %", volume_percentage)).alignment(Alignment::Right);
     let status = Line::from(vec![" Rep ".into(), " Loop ".into(), " Upd ".into()])
         .alignment(Alignment::Right);
     Paragraph::new(line).render(layout[0], buf);
-    Paragraph::new(volume)
+    Paragraph::new(duration)
         .block(
             Block::new()
                 .borders(Borders::LEFT | Borders::RIGHT)
                 .padding(Padding::horizontal(1)),
         )
         .render(layout[1], buf);
-    Paragraph::new(status).render(layout[2], buf);
+    Paragraph::new(volume)
+        .block(
+            Block::new()
+                .borders(Borders::RIGHT)
+                .padding(Padding::horizontal(1)),
+        )
+        .render(layout[2], buf);
+    Paragraph::new(status).render(layout[3], buf);
+}
+
+#[allow(non_snake_case)]
+fn SidebarRight(clock: u128, loading: bool, area: Rect, buf: &mut Buffer) {
+    Paragraph::new(format!("sidebar right\n{clock} {loading}"))
+        .block(Block::new().borders(Borders::all()))
+        .render(area, buf)
+}
+
+fn timestamp(dur: &Option<Duration>) -> String {
+    match dur {
+        Some(dur) => {
+            let ms = dur.as_secs();
+            let mins = ms / 60;
+            let ms_rest = ms - mins * 60;
+            format!("{mins}:{ms_rest}")
+        }
+        None => "00:00".into(),
+    }
 }
 
 // TODO: file refactor

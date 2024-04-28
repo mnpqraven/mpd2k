@@ -10,9 +10,9 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut AppState) -> Result<(), 
         KeyCode::Char('u') => {
             // not loading
             if app
-                .library_loading
+                .library_client
                 .try_lock()
-                .is_ok_and(|loading| !*loading)
+                .is_ok_and(|client| !client.loading)
             {
                 app.update_lib()
             }
@@ -20,6 +20,8 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut AppState) -> Result<(), 
 
         KeyCode::Char('1') => app.navigate(NavigationRoute::Playback),
         KeyCode::Char('2') => app.navigate(NavigationRoute::Config),
+        KeyCode::Char('+') => app.volume_up(),
+        KeyCode::Char('-') | KeyCode::Char('=') => app.volume_down(),
         _ => {}
     }
 

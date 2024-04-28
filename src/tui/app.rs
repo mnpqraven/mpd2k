@@ -1,6 +1,6 @@
 use super::types::*;
 use crate::{
-    backend::library::cache::update_cache,
+    backend::library::{cache::update_cache, create_source},
     client::{library::LibraryClient, PlaybackEvent},
     dotfile::DotfileSchema,
 };
@@ -9,6 +9,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::prelude::*;
+use rodio::Source;
 use std::{
     io::{self, stdout},
     sync::{Arc, Mutex},
@@ -35,7 +36,6 @@ impl AppState {
             playback_tx,
             navigation: NavigationState::default(),
             library_client: Arc::new(Mutex::new(LibraryClient::default())),
-            library_loading: Arc::new(Mutex::new(bool::default())),
             exit: bool::default(),
         }
     }
@@ -49,35 +49,41 @@ impl AppState {
     pub fn update_lib(&mut self) {
         // probably wrong
         let tree_arced = self.library_client.clone();
-        let loading_arced = self.library_loading.clone();
+        let tree_arced2 = self.library_client.clone();
+        let mut guard = tree_arced2.lock().unwrap();
+        if !guard.loading {
+            guard.set_loading(true);
 
-        self.toggle_loading();
+            tokio::spawn(async move {
+                let cfg = DotfileSchema::parse().unwrap();
+                let _ = update_cache(&cfg, tree_arced.clone()).await.unwrap();
 
-        tokio::spawn(async move {
-            let cfg = DotfileSchema::parse().unwrap();
-            let _ = update_cache(&cfg, tree_arced).await.unwrap();
-
-            let mut loading = loading_arced.lock().unwrap();
-            *loading = !*loading;
-        });
+                let mut lib = tree_arced.lock().unwrap();
+                lib.set_loading(false);
+            });
+        }
     }
 
     pub fn navigate(&mut self, to: NavigationRoute) {
         self.navigation.current = to
     }
 
-    pub fn toggle_loading(&mut self) {
-        let mut loading = self.library_loading.try_lock().unwrap();
-        *loading = !*loading;
-    }
-
     pub fn play(&mut self) {
         let lib = self.library_client.lock().unwrap();
-        let tui_state = lib.tui_state.lock().unwrap();
 
+        let tui_state = lib.tui_state.lock().unwrap();
         let index = tui_state.selected().unwrap();
 
-        let track_path = &lib.audio_tracks.get(index).unwrap().path;
+        let track_path = lib.audio_tracks.get(index).unwrap().path.clone();
+
+        drop(tui_state);
+        drop(lib);
+
+        let mut lib = self.library_client.lock().unwrap();
+        let source = create_source(track_path.clone()).unwrap();
+
+        lib.current_track_duration = source.total_duration();
+
         let _ = self
             .playback_tx
             .send(PlaybackEvent::Play(track_path.to_string()));
@@ -107,11 +113,24 @@ impl AppState {
         let mut tui_state = audio_tree.tui_state.lock().unwrap();
         match tui_state.selected() {
             Some(index) => {
-                if index > 1 {
+                if index >= 1 {
                     tui_state.select(Some(index - 1))
                 }
             }
             None => tui_state.select(Some(0)),
         }
+    }
+
+    pub fn volume_down(&mut self) {
+        let mut audio_tree = self.library_client.lock().unwrap();
+        audio_tree.volume_down();
+
+        let _ = self.playback_tx.send(PlaybackEvent::VolumeDown);
+    }
+    pub fn volume_up(&mut self) {
+        let mut audio_tree = self.library_client.lock().unwrap();
+        audio_tree.volume_up();
+
+        let _ = self.playback_tx.send(PlaybackEvent::VolumeUp);
     }
 }

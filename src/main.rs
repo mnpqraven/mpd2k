@@ -36,6 +36,7 @@ async fn main() -> Result<(), AppError> {
     let mut playback_server = PlaybackServer::new(playback_handle);
 
     let playback_tx = playback_server.sender.clone();
+    // NOTE: we can access sink data from global app by passing SinkArc into this
     let mut app = AppState::new(playback_tx.clone());
     // WARN: DATA NEEDS TO BE INIT BEFORE THIS (stateful_tui)
     // STDOUT INIT

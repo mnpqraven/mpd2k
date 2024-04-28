@@ -37,7 +37,8 @@ pub enum PlaybackEvent {
     /// this toggles between play and paused state
     Pause,
     Tick,
-    AppExit,
+    VolumeUp,
+    VolumeDown,
 }
 
 /// wrapper struct that takes ownership of metadata from other clients so they
@@ -83,21 +84,27 @@ impl PlaybackServer {
         // manage
 
         if let Ok(message) = self.receiver.try_recv() {
+            let sink = self.sink.arced();
+
             match message {
                 PlaybackEvent::Play(path) => {
-                    let sink = self.sink.arced();
                     let source = create_source(path).unwrap();
                     sink.clear();
                     sink.append(source);
                     sink.play();
                 }
-                PlaybackEvent::Pause => {
-                    let sink = self.sink.arced();
-                    match sink.is_paused() {
-                        true => sink.play(),
-                        false => sink.pause(),
-                    }
-                }
+                PlaybackEvent::Pause => match sink.is_paused() {
+                    true => sink.play(),
+                    false => sink.pause(),
+                },
+                PlaybackEvent::VolumeUp => match sink.volume() {
+                    0.95.. => sink.set_volume(1.0),
+                    _ => sink.set_volume(sink.volume() + 0.05),
+                },
+                PlaybackEvent::VolumeDown => match sink.volume() {
+                    0.05.. => sink.set_volume(sink.volume() - 0.05),
+                    _ => sink.set_volume(0.0),
+                },
                 _ => {}
             }
         }

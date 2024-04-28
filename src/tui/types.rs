@@ -12,7 +12,6 @@ pub struct AppState {
     // TODO: state for tab
     pub navigation: NavigationState,
     pub library_client: Arc<Mutex<LibraryClient>>,
-    pub library_loading: Arc<Mutex<bool>>,
     pub playback_tx: UnboundedSender<PlaybackEvent>,
     pub exit: bool,
 }

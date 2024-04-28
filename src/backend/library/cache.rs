@@ -37,7 +37,7 @@ pub fn try_load_cache() -> Result<Vec<AudioTrack>, AppError> {
         .collect::<Vec<AudioTrack>>())
 }
 
-/// TODO: hashing files
+/// TODO: implement hashing files
 /// compare hash to see if a file has changed its metadata and needs to be
 /// updated
 pub async fn update_cache(
@@ -45,7 +45,9 @@ pub async fn update_cache(
     tree_arc: Arc<Mutex<LibraryClient>>,
 ) -> Result<Vec<AudioTrack>, AppError> {
     let cache_path = DotfileSchema::cache_path()?;
+    // force full scan
     if cache_path.exists() {
+        info!("removing cache file");
         tokio::fs::remove_file(&cache_path).await?;
     }
 
@@ -65,6 +67,7 @@ pub async fn update_cache(
                     track.album.clone().unwrap_or_default(),
                     track.album_artist.clone().unwrap_or_default(),
                 ];
+                info!("writing {}", track.name.clone());
                 writer.write_record(as_bytes).unwrap();
             });
             info!("update_cache complete");
