@@ -1,3 +1,5 @@
+use rodio::decoder::DecoderError;
+
 // TODO: split err
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
@@ -8,6 +10,9 @@ pub enum AppError {
 
     #[error("The mutex was poisoned")]
     PoisonError(String),
+
+    #[error(transparent)]
+    DecoderError(#[from] DecoderError),
 
     #[error(transparent)]
     Walkdir(#[from] walkdir::Error),

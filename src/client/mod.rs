@@ -31,7 +31,10 @@ pub trait Toggle {
 
 #[derive(Debug)]
 pub enum PlaybackEvent {
+    /// path to the audio file
+    ///
     /// this will clear all current queue and start anew, not actually
+    ///
     /// playing/resuming, pause state is handled by `PlaybackEvent::Pause`
     Play(String),
     /// this toggles between play and paused state

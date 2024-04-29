@@ -1,7 +1,10 @@
 use super::types::*;
 use crate::{
-    backend::library::{cache::update_cache, create_source},
-    client::{library::LibraryClient, PlaybackEvent},
+    backend::library::{cache::try_write_cache, create_source, load_all_tracks_unhashed},
+    client::{
+        library::{CurrentTrack, LibraryClient},
+        PlaybackEvent,
+    },
     dotfile::DotfileSchema,
 };
 use crossterm::{
@@ -56,7 +59,12 @@ impl AppState {
 
             tokio::spawn(async move {
                 let cfg = DotfileSchema::parse().unwrap();
-                let _ = update_cache(&cfg, tree_arced.clone()).await.unwrap();
+                // let _ = update_cache(&cfg, tree_arced.clone()).await.unwrap();
+                let tracks = load_all_tracks_unhashed(&cfg, tree_arced.clone()).unwrap();
+
+                tokio::spawn(async move {
+                    let _ = try_write_cache(&DotfileSchema::cache_path().unwrap(), &tracks).await;
+                });
 
                 let mut lib = tree_arced.lock().unwrap();
                 lib.set_loading(false);
@@ -74,19 +82,21 @@ impl AppState {
         let tui_state = lib.tui_state.lock().unwrap();
         let index = tui_state.selected().unwrap();
 
-        let track_path = lib.audio_tracks.get(index).unwrap().path.clone();
+        let track = lib.audio_tracks.get(index).unwrap();
 
         drop(tui_state);
-        drop(lib);
 
         let mut lib = self.library_client.lock().unwrap();
-        let source = create_source(track_path.clone()).unwrap();
+        let source = create_source(track.path.clone()).unwrap();
 
-        lib.current_track_duration = source.total_duration();
+        lib.current_track = Some(CurrentTrack {
+            data: track.clone(),
+            duration: source.total_duration().unwrap(),
+        });
 
         let _ = self
             .playback_tx
-            .send(PlaybackEvent::Play(track_path.to_string()));
+            .send(PlaybackEvent::Play(track.path.clone()));
     }
 
     pub fn select_next_track(&mut self) {

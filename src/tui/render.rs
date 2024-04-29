@@ -73,7 +73,7 @@ impl Widget for &AppState {
 
                 PlaybackBottom(
                     track,
-                    audio_tree.current_track_duration,
+                    Some(audio_tree.current_track.clone().unwrap().duration),
                     audio_tree.volume_percentage(),
                     container_left_ud[2],
                     buf,
@@ -96,14 +96,17 @@ fn MainBoxLeft(data: Option<&AudioTrack>, area: Rect, buf: &mut Buffer) {
     let paragraph = match data {
         None => Paragraph::default().block(block),
         Some(data) => {
-            let text = vec![
-                Line::from(format!("Album: {}", data.album.clone().unwrap_or_default())),
-                Line::from(format!(
-                    "Album Artist: {}",
-                    data.album_artist.clone().unwrap_or_default()
-                )),
-                Line::from("Year: 2024"),
-            ];
+            let mut text = Vec::new();
+            if let Some(album) = &data.album {
+                text.push(Line::from(format!("Album: {}", album)))
+            }
+            if let Some(album_artist) = &data.album_artist {
+                text.push(Line::from(format!("Album Artist: {}", album_artist)))
+            }
+            if let Some(date) = &data.date {
+                text.push(Line::from(format!("Released: {}", date)))
+            }
+
             Paragraph::new(text).block(block)
         }
     };
@@ -132,7 +135,7 @@ fn PlaybackBottom(
     .split(area);
     block.render(area, buf);
 
-    let symbol_elapsed = Span::raw(">");
+    let _symbol_elapsed = Span::raw(">");
     let symbol_empty = Span::raw("-");
     let playback_line_width = layout[0].width;
     // TODO: math out rendering logic for elapsed duration
@@ -169,7 +172,7 @@ fn PlaybackBottom(
 
 #[allow(non_snake_case)]
 fn SidebarRight(clock: u128, loading: bool, area: Rect, buf: &mut Buffer) {
-    Paragraph::new(format!("sidebar right\n{clock} {loading}"))
+    Paragraph::new(format!("{clock} {loading}"))
         .block(Block::new().borders(Borders::all()))
         .render(area, buf)
 }

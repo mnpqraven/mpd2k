@@ -1,18 +1,26 @@
-use crate::backend::library::{cache::try_load_cache, AudioTrack};
+use crate::{
+    backend::library::{cache::try_load_cache, AudioTrack},
+    dotfile::DotfileSchema,
+};
 use ratatui::widgets::TableState;
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tracing::instrument;
 
 #[derive(Debug)]
 pub struct LibraryClient {
     pub audio_tracks: Vec<AudioTrack>,
     pub tui_state: Arc<Mutex<TableState>>,
-    pub current_track_duration: Option<Duration>,
+    pub current_track: Option<CurrentTrack>,
     pub volume: f32,
     pub loading: bool,
+}
+// NOTE: does this really need clone ?
+#[derive(Debug, Clone)]
+pub struct CurrentTrack {
+    pub data: AudioTrack,
+    pub duration: Duration,
 }
 
 impl LibraryClient {
@@ -46,15 +54,14 @@ impl LibraryClient {
 }
 
 impl Default for LibraryClient {
-    #[instrument(ret)]
     fn default() -> Self {
         Self {
-            audio_tracks: try_load_cache().unwrap_or_default(),
+            audio_tracks: try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default(),
             // selected_track_index: Default::default(),
             tui_state: Default::default(),
             loading: false,
             volume: 1.0,
-            current_track_duration: None,
+            current_track: None,
         }
     }
 }

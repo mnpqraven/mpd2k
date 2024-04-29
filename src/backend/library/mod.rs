@@ -5,8 +5,10 @@ use crate::{
     error::AppError,
 };
 use audiotags::Tag;
+use chrono::{Datelike, NaiveDate};
 use rodio::Decoder;
 use std::{
+    fmt::Display,
     fs::File,
     io::BufReader,
     path::{Path, PathBuf},
@@ -16,7 +18,9 @@ use tracing::info;
 use walkdir::WalkDir;
 
 pub mod cache;
+pub mod hash;
 
+// NOTE: keep expanding this or migrate to album(outer struct) > tracks(inner struct)
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct AudioTrack {
     pub name: String,
@@ -25,6 +29,41 @@ pub struct AudioTrack {
     pub album: Option<String>,
     pub album_artist: Option<String>,
     pub track_no: Option<u16>,
+    pub date: Option<AlbumDate>,
+    pub(self) binary_hash: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct AlbumDate {
+    // at year is always `Some`, if we can't parse year then the whole struct is safe to be `None`
+    pub year: u32,
+    pub month: Option<u8>,
+    pub day: Option<u8>,
+}
+impl AlbumDate {
+    fn parse(text: &str) -> Option<Self> {
+        // TODO: more formats
+        match NaiveDate::parse_from_str(text, "%Y.%m.%d") {
+            Ok(s) => Some(Self {
+                year: s.year() as u32,
+                month: Some((s.month0() + 1) as u8),
+                day: Some((s.day0() + 1) as u8),
+            }),
+            Err(_) => None,
+        }
+    }
+}
+impl Display for AlbumDate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut s = self.year.to_string();
+        if let Some(month) = self.month {
+            s.push_str(&format!(".{month}"));
+        }
+        if let Some(day) = self.day {
+            s.push_str(&format!(".{day}"));
+        }
+        write!(f, "{}", s)
+    }
 }
 
 impl PlayableAudio for &AudioTrack {
@@ -33,7 +72,7 @@ impl PlayableAudio for &AudioTrack {
     }
 }
 
-pub fn load_all_tracks_incremental(
+pub fn load_all_tracks_unhashed(
     config: &DotfileSchema,
     tree_arc: Arc<Mutex<LibraryClient>>,
 ) -> Result<Vec<AudioTrack>, AppError> {
@@ -54,12 +93,11 @@ pub fn load_all_tracks_incremental(
             // TODO:
             // separate thread
             // most expensive work
-            let tag = Tag::new().read_from_path(path.clone())?;
+            let tag = Tag::new().read_from_path(&path)?;
             let name = tag.title().unwrap_or(&filename).to_string();
             let album = tag.album_title().map(|e| e.to_owned());
             let artist = tag.artist().map(|e| e.to_owned());
-            let date  = tag.date();
-            info!(?date);
+            let date = tag.date_raw().and_then(AlbumDate::parse);
             let album_artist = tag.album_artist().map(|e| e.to_owned());
             let track_no = tag.track_number();
 
@@ -69,8 +107,10 @@ pub fn load_all_tracks_incremental(
                 track_no,
                 // _meta: entry,
                 artist,
+                date,
                 album,
                 album_artist,
+                binary_hash: None,
             };
 
             // we only lock after the tags lookup is completed
@@ -114,7 +154,7 @@ pub fn sort_library(tracks: &mut [AudioTrack]) -> Result<(), AppError> {
 
 pub fn create_source<P: AsRef<Path>>(path: P) -> Result<Decoder<BufReader<File>>, AppError> {
     let file = BufReader::new(File::open(path)?);
-    let source = Decoder::new(file).unwrap();
+    let source = Decoder::new(file)?;
     Ok(source)
 }
 
