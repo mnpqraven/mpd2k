@@ -1,7 +1,7 @@
 use super::{events::PlaybackEvent, ClientKind, PlaybackClient};
 use crate::{
     backend::library::{
-        cache::{try_load_cache, try_write_cache},
+        cache::{try_load_cache, try_write_cache_multithread},
         create_source, load_all_tracks_unhashed, AudioTrack,
     },
     dotfile::DotfileSchema,
@@ -13,7 +13,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
 
 #[derive(Debug)]
 pub struct LibraryClient {
@@ -22,6 +22,7 @@ pub struct LibraryClient {
     pub playback_tx: UnboundedSender<PlaybackEvent>,
     pub volume: f32,
     pub loading: bool,
+    hashing_rt: Runtime,
 }
 // NOTE: does this really need clone ?
 #[derive(Debug, Clone)]
@@ -61,13 +62,16 @@ impl LibraryClient {
     pub fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
         Self {
             audio_tracks: try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default(),
-            // selected_track_index: Default::default(),
-            // tui_state: Default::default(),
             loading: false,
             volume: 1.0,
             current_track: None,
+            hashing_rt: Runtime::new().unwrap(),
             playback_tx,
         }
+    }
+
+    pub fn cleanup(self) {
+        self.hashing_rt.shutdown_background();
     }
 }
 
@@ -144,18 +148,27 @@ impl PlaybackClient for LibraryClient {
     fn audio_tracks(&self) -> &[AudioTrack] {
         &self.audio_tracks
     }
+
     fn update_lib(&mut self, self_arc: Option<Arc<Mutex<LibraryClient>>>) {
         if let Some(self_arc) = self_arc
             && !self.loading
         {
             self.set_loading(true);
+            let handle = self.hashing_rt.handle().clone();
+            let handle_for_inner = handle.clone();
 
-            tokio::spawn(async move {
+            self.hashing_rt.spawn(async move {
                 let cfg = DotfileSchema::parse().unwrap();
                 let tracks = load_all_tracks_unhashed(&cfg, self_arc.clone()).unwrap();
 
-                tokio::spawn(async move {
-                    let _ = try_write_cache(&DotfileSchema::cache_path().unwrap(), &tracks).await;
+                handle.spawn(async move {
+                    // let _ = try_write_cache(&DotfileSchema::cache_path().unwrap(), &tracks).await;
+                    let _ = try_write_cache_multithread(
+                        &DotfileSchema::cache_path().unwrap(),
+                        &tracks,
+                        handle_for_inner,
+                    )
+                    .await;
                 });
 
                 if let Ok(mut lib) = self_arc.lock() {

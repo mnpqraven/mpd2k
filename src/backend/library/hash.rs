@@ -6,8 +6,11 @@ use std::{
     fs::{self, File},
     path::Path,
 };
+use strum::Display;
+use tracing::info;
 
 #[allow(dead_code)]
+#[derive(Debug, Display)]
 pub(super) enum HashKind {
     Sha256,
     Murmur,
@@ -18,10 +21,13 @@ pub(super) fn hash_file<T: AsRef<Path> + Debug>(
     file: T,
     kind: HashKind,
 ) -> Result<String, AppError> {
-    match kind {
-        HashKind::Sha256 => get_hash_sha256(file),
-        HashKind::Murmur => get_hash_murmur_64(file),
-    }
+    info!("hashing {:?} using {kind} started", file);
+    let hash = match kind {
+        HashKind::Sha256 => get_hash_sha256(&file),
+        HashKind::Murmur => get_hash_murmur_64(&file),
+    };
+    info!("hashed {:?} using {kind} done: {:?}", file, hash);
+    hash
 }
 
 /// create a SHA-2 of a file

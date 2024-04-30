@@ -7,6 +7,8 @@ pub mod dotfile;
 pub mod error;
 pub mod tui;
 
+use std::sync::Arc;
+
 use client::{
     events::{PlaybackEvent, PlaybackServer},
     library::LibraryClient,
@@ -73,6 +75,9 @@ async fn main() -> Result<(), AppError> {
     }
 
     // STDOUT CLEANUP
+    if let Some(Ok(lib)) = Arc::into_inner(app.library_client).map(|e| e.into_inner()) {
+        LibraryClient::cleanup(lib);
+    }
     playback_rt.shutdown_background();
     // TODO:  FIX: hashing thread is not exiting properly
     app::teardown()?;
