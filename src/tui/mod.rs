@@ -1,9 +1,11 @@
 use self::events::EventHandler;
 use self::types::AppState;
+use crate::client::PlaybackClient;
 use crate::error::AppError;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::backend::Backend;
+use ratatui::widgets::Widget;
 use ratatui::Terminal;
 use std::io;
 use std::panic;
@@ -60,9 +62,13 @@ impl<B: Backend> Tui<B> {
     ///
     /// [`Draw`]: ratatui::Terminal::draw
     /// [`rendering`]: crate::ui::render
-    pub fn draw(&mut self, app: &mut AppState) -> Result<(), AppError> {
+    pub fn draw<Client>(&mut self, app: &AppState<Client>) -> Result<(), AppError>
+    where
+        Client: PlaybackClient,
+        for<'a> &'a AppState<Client>: Widget,
+    {
         self.terminal
-            .draw(|frame| frame.render_widget(&*app, frame.size()))?;
+            .draw(|frame| frame.render_widget(app, frame.size()))?;
         Ok(())
     }
 

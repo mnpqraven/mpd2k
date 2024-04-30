@@ -1,5 +1,5 @@
 use super::types::{AppState, NavigationRoute, NavigationState, Tui};
-use crate::client::{events::PlaybackEvent, library::LibraryClient, PlaybackClient};
+use crate::client::{events::PlaybackEvent, PlaybackClient};
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -25,13 +25,13 @@ pub fn teardown() -> io::Result<()> {
     Ok(())
 }
 
-impl AppState {
+impl<Client: PlaybackClient> AppState<Client> {
     // TODO: generic refactor
     pub fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
         Self {
             navigation: NavigationState::default(),
             tui_state: Default::default(),
-            library_client: Arc::new(Mutex::new(LibraryClient::new(playback_tx))),
+            library_client: Arc::new(Mutex::new(Client::new(playback_tx))),
             exit: bool::default(),
         }
     }

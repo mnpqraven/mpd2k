@@ -7,7 +7,10 @@ pub mod dotfile;
 pub mod error;
 pub mod tui;
 
-use client::events::{PlaybackEvent, PlaybackServer};
+use client::{
+    events::{PlaybackEvent, PlaybackServer},
+    library::LibraryClient,
+};
 use dotfile::DotfileSchema;
 use error::AppError;
 use ratatui::{backend::CrosstermBackend, Terminal};
@@ -38,7 +41,7 @@ async fn main() -> Result<(), AppError> {
 
     let playback_tx = playback_server.sender.clone();
     // NOTE: we can access sink data from global app by passing SinkArc into this
-    let mut app = AppState::new(playback_tx.clone());
+    let mut app = AppState::<LibraryClient>::new(playback_tx.clone());
     // WARN: DATA NEEDS TO BE INIT BEFORE THIS (stateful_tui)
     // STDOUT INIT
     let backend = CrosstermBackend::new(std::io::stderr());
@@ -53,7 +56,7 @@ async fn main() -> Result<(), AppError> {
 
     // MAIN EVENT LOOP
     while !app.exit {
-        tui.draw(&mut app)?;
+        tui.draw(&app)?;
 
         match tui.events.next().await? {
             Event::Tick => {
@@ -71,6 +74,7 @@ async fn main() -> Result<(), AppError> {
 
     // STDOUT CLEANUP
     playback_rt.shutdown_background();
+    // TODO:  FIX: hashing thread is not exiting properly
     app::teardown()?;
 
     Ok(())

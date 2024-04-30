@@ -1,13 +1,20 @@
 use super::types::{AppState, NavigationRoute, NavigationState};
-use crate::{backend::library::AudioTrack, client::library::LibraryClient};
-use ratatui::{prelude::*, widgets::*};
-use std::{
-    sync::MutexGuard,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+use crate::{
+    backend::library::AudioTrack,
+    client::{library::LibraryClient, PlaybackClient},
 };
+use ratatui::{
+    prelude::*,
+    widgets::{TableState, *},
+};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use strum::IntoEnumIterator;
 
-impl Widget for &AppState {
+impl<Client> Widget for &AppState<Client>
+where
+    Client: PlaybackClient,
+    for<'a> &'a Client: StatefulWidget<State = TableState>,
+{
     /// TODO:
     /// ```
     /// // |-------------------------------|
@@ -44,7 +51,7 @@ impl Widget for &AppState {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis();
-        let is_loading = self.library_client.lock().map(|e| e.loading).unwrap();
+        let is_loading = self.library_client.lock().map(|e| e.loading()).unwrap();
 
         // NAVBAR
         self.navigation.render(container_left_ud[0], buf);
@@ -59,31 +66,24 @@ impl Widget for &AppState {
 
         // mainbox_left_component.render(area, buf)
 
-        match self.library_client.try_lock() {
-            Ok(audio_tree) if self.tui_state.try_lock().is_ok() => {
-                let lookup_fn = |e: MutexGuard<TableState>| {
-                    e.selected().and_then(|f| audio_tree.audio_tracks.get(f))
-                };
-                let track = self.tui_state.lock().map(lookup_fn).unwrap();
+        if let Ok(audio_tree) = self.library_client.try_lock()
+            && let Ok(mut tui_state) = self.tui_state.try_lock()
+        {
+            let current_track = tui_state
+                .selected()
+                .and_then(|f| audio_tree.audio_tracks().get(f));
 
-                let mut tui_state = self.tui_state.try_lock().unwrap();
-                audio_tree.render(mainbox_right, buf, &mut tui_state);
+            audio_tree.render(mainbox_right, buf, &mut tui_state);
 
-                MainBoxLeft(track, mainbox_left, buf);
+            MainBoxLeft(current_track, mainbox_left, buf);
 
-                PlaybackBottom(
-                    track,
-                    audio_tree.current_track.clone().map(|e| e.duration),
-                    audio_tree.volume_percentage(),
-                    container_left_ud[2],
-                    buf,
-                );
-            }
-            _ => {
-                let mut empty = TableState::default();
-                // TODO: default render
-                // LibraryClient::default().render(mainbox_right, buf, &mut empty);
-            }
+            PlaybackBottom(
+                current_track,
+                audio_tree.current_track().map(|e| e.duration),
+                audio_tree.volume_percentage(),
+                container_left_ud[2],
+                buf,
+            );
         };
 
         // RIGHT SIDEBAR
@@ -191,12 +191,13 @@ fn timestamp(dur: &Option<Duration>) -> String {
 }
 
 // TODO: file refactor
+// TODO: render for mpd client too
 impl StatefulWidget for &LibraryClient {
     type State = TableState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let rows = self
-            .audio_tracks
+            .audio_tracks()
             .iter()
             .map(|data| {
                 Row::new([

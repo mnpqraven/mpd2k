@@ -1,9 +1,12 @@
 use super::types::*;
-use crate::error::AppError;
+use crate::{client::PlaybackClient, error::AppError};
 use crossterm::event::{KeyCode, KeyEvent};
 
 /// Handles the key events and updates the state of [`AppState`].
-pub fn handle_key_events(key_event: KeyEvent, app: &mut AppState) -> Result<(), AppError> {
+pub fn handle_key_events<Client: PlaybackClient>(
+    key_event: KeyEvent,
+    app: &mut AppState<Client>,
+) -> Result<(), AppError> {
     // universal
     match key_event.code {
         KeyCode::Char('q') => app.exit(),
@@ -12,7 +15,7 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut AppState) -> Result<(), 
             if app
                 .library_client
                 .try_lock()
-                .is_ok_and(|client| !client.loading)
+                .is_ok_and(|client| !client.loading())
             {
                 app.update_lib()
             }

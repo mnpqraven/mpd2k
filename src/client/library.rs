@@ -55,9 +55,6 @@ impl LibraryClient {
             _ => self.volume = 0.0,
         }
     }
-    pub fn volume_percentage(&self) -> u8 {
-        (self.volume * 100.0).round() as u8
-    }
 }
 
 impl LibraryClient {
@@ -75,6 +72,10 @@ impl LibraryClient {
 }
 
 impl PlaybackClient for LibraryClient {
+    fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
+        Self::new(playback_tx)
+    }
+
     fn play(&mut self, table_state: &TableState) -> Result<(), AppError> {
         let track = table_state
             .selected()
@@ -136,6 +137,13 @@ impl PlaybackClient for LibraryClient {
         self.volume_down()
     }
 
+    fn loading(&self) -> bool {
+        self.loading
+    }
+
+    fn audio_tracks(&self) -> &[AudioTrack] {
+        &self.audio_tracks
+    }
     fn update_lib(&mut self, self_arc: Option<Arc<Mutex<LibraryClient>>>) {
         if let Some(self_arc) = self_arc
             && !self.loading
@@ -156,7 +164,12 @@ impl PlaybackClient for LibraryClient {
             });
         }
     }
-}
 
-#[cfg(test)]
-mod tests {}
+    fn current_track(&self) -> Option<&CurrentTrack> {
+        self.current_track.as_ref()
+    }
+
+    fn volume_percentage(&self) -> u8 {
+        (self.volume * 100.0).round() as u8
+    }
+}
