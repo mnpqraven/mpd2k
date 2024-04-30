@@ -6,7 +6,7 @@ pub mod dotfile;
 pub mod error;
 pub mod tui;
 
-use client::{PlaybackEvent, PlaybackServer};
+use client::events::{PlaybackEvent, PlaybackServer};
 use dotfile::DotfileSchema;
 use error::AppError;
 use ratatui::{backend::CrosstermBackend, Terminal};
