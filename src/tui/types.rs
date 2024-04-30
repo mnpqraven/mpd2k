@@ -1,5 +1,5 @@
 use crate::client::library::LibraryClient;
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{backend::CrosstermBackend, widgets::TableState, Terminal};
 use std::{
     io::Stdout,
     sync::{Arc, Mutex},
@@ -11,6 +11,7 @@ pub struct AppState {
     // TODO: state for tab
     pub navigation: NavigationState,
     pub library_client: Arc<Mutex<LibraryClient>>,
+    pub tui_state: Arc<Mutex<TableState>>,
     pub exit: bool,
 }
 

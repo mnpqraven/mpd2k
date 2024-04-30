@@ -60,13 +60,13 @@ impl Widget for &AppState {
         // mainbox_left_component.render(area, buf)
 
         match self.library_client.try_lock() {
-            Ok(audio_tree) if audio_tree.tui_state.try_lock().is_ok() => {
+            Ok(audio_tree) if self.tui_state.try_lock().is_ok() => {
                 let lookup_fn = |e: MutexGuard<TableState>| {
                     e.selected().and_then(|f| audio_tree.audio_tracks.get(f))
                 };
-                let track = audio_tree.tui_state.lock().map(lookup_fn).unwrap();
+                let track = self.tui_state.lock().map(lookup_fn).unwrap();
 
-                let mut tui_state = audio_tree.tui_state.try_lock().unwrap();
+                let mut tui_state = self.tui_state.try_lock().unwrap();
                 audio_tree.render(mainbox_right, buf, &mut tui_state);
 
                 MainBoxLeft(track, mainbox_left, buf);
