@@ -1,12 +1,15 @@
 use crate::{
     backend::library::{cache::try_load_cache, AudioTrack},
     dotfile::DotfileSchema,
+    error::AppError,
 };
 use ratatui::widgets::TableState;
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+
+use super::{ClientKind, PlaybackClient};
 
 #[derive(Debug)]
 pub struct LibraryClient {
@@ -63,6 +66,16 @@ impl Default for LibraryClient {
             volume: 1.0,
             current_track: None,
         }
+    }
+}
+
+impl PlaybackClient for LibraryClient {
+    fn play(&self) -> Result<(), AppError> {
+        todo!()
+    }
+
+    fn kind(&self) -> ClientKind {
+        ClientKind::Library
     }
 }
 

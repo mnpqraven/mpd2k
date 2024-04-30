@@ -1,9 +1,11 @@
 use super::types::*;
 use crate::{
     backend::library::{cache::try_write_cache, create_source, load_all_tracks_unhashed},
-    client::library::{CurrentTrack, LibraryClient},
+    client::{
+        events::PlaybackEvent,
+        library::{CurrentTrack, LibraryClient},
+    },
     dotfile::DotfileSchema,
-    PlaybackEvent,
 };
 use crossterm::{
     execute,

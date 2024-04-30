@@ -24,16 +24,11 @@ pub struct Tui<B: Backend> {
     terminal: Terminal<B>,
     /// Terminal event handler.
     pub events: EventHandler,
-    // pub playback_events: PlaybackClient,
 }
 
 impl<B: Backend> Tui<B> {
     /// Constructs a new instance of [`Tui`].
-    pub fn new(
-        terminal: Terminal<B>,
-        events: EventHandler,
-        // playback_events: PlaybackClient,
-    ) -> Self {
+    pub fn new(terminal: Terminal<B>, events: EventHandler) -> Self {
         Self {
             terminal,
             events,
