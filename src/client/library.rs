@@ -1,3 +1,4 @@
+use super::{events::PlaybackEvent, ClientKind, PlaybackClient};
 use crate::{
     backend::library::{cache::try_load_cache, AudioTrack},
     dotfile::DotfileSchema,
@@ -8,14 +9,14 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-
-use super::{ClientKind, PlaybackClient};
+use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug)]
 pub struct LibraryClient {
     pub audio_tracks: Vec<AudioTrack>,
     pub tui_state: Arc<Mutex<TableState>>,
     pub current_track: Option<CurrentTrack>,
+    pub playback_tx: UnboundedSender<PlaybackEvent>,
     pub volume: f32,
     pub loading: bool,
 }
@@ -56,8 +57,8 @@ impl LibraryClient {
     }
 }
 
-impl Default for LibraryClient {
-    fn default() -> Self {
+impl LibraryClient {
+    pub fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
         Self {
             audio_tracks: try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default(),
             // selected_track_index: Default::default(),
@@ -65,6 +66,7 @@ impl Default for LibraryClient {
             loading: false,
             volume: 1.0,
             current_track: None,
+            playback_tx,
         }
     }
 }

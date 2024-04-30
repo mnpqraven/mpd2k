@@ -36,9 +36,9 @@ pub fn teardown() -> io::Result<()> {
 impl AppState {
     pub fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
         Self {
-            playback_tx,
+            // playback_tx: playback_tx.clone(),
             navigation: NavigationState::default(),
-            library_client: Arc::new(Mutex::new(LibraryClient::default())),
+            library_client: Arc::new(Mutex::new(LibraryClient::new(playback_tx))),
             exit: bool::default(),
         }
     }
@@ -94,7 +94,7 @@ impl AppState {
             duration: source.total_duration().unwrap(),
         });
 
-        let _ = self
+        let _ = lib
             .playback_tx
             .send(PlaybackEvent::Play(track.path.clone()));
     }
@@ -115,7 +115,10 @@ impl AppState {
     }
 
     pub fn pause_unpause(&mut self) {
-        let _ = self.playback_tx.send(PlaybackEvent::Pause);
+        let _ = self
+            .library_client
+            .lock()
+            .map(|lib| lib.playback_tx.send(PlaybackEvent::Pause));
     }
 
     pub fn select_prev_track(&mut self) {
@@ -135,12 +138,12 @@ impl AppState {
         let mut audio_tree = self.library_client.lock().unwrap();
         audio_tree.volume_down();
 
-        let _ = self.playback_tx.send(PlaybackEvent::VolumeDown);
+        let _ = audio_tree.playback_tx.send(PlaybackEvent::VolumeDown);
     }
     pub fn volume_up(&mut self) {
         let mut audio_tree = self.library_client.lock().unwrap();
         audio_tree.volume_up();
 
-        let _ = self.playback_tx.send(PlaybackEvent::VolumeUp);
+        let _ = audio_tree.playback_tx.send(PlaybackEvent::VolumeUp);
     }
 }

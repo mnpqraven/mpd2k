@@ -1,18 +1,16 @@
-use crate::client::{events::PlaybackEvent, library::LibraryClient};
+use crate::client::library::LibraryClient;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{
     io::Stdout,
     sync::{Arc, Mutex},
 };
 use strum::{Display, EnumIter};
-use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug)]
 pub struct AppState {
     // TODO: state for tab
     pub navigation: NavigationState,
     pub library_client: Arc<Mutex<LibraryClient>>,
-    pub playback_tx: UnboundedSender<PlaybackEvent>,
     pub exit: bool,
 }
 

@@ -73,7 +73,7 @@ impl Widget for &AppState {
 
                 PlaybackBottom(
                     track,
-                    Some(audio_tree.current_track.clone().unwrap().duration),
+                    audio_tree.current_track.clone().map(|e| e.duration),
                     audio_tree.volume_percentage(),
                     container_left_ud[2],
                     buf,
@@ -81,7 +81,8 @@ impl Widget for &AppState {
             }
             _ => {
                 let mut empty = TableState::default();
-                LibraryClient::default().render(mainbox_right, buf, &mut empty);
+                // TODO: default render
+                // LibraryClient::default().render(mainbox_right, buf, &mut empty);
             }
         };
 

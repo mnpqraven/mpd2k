@@ -1,9 +1,9 @@
 use crate::error::AppError;
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
 
+pub mod events;
 pub mod library;
 pub mod mpd;
-pub mod events;
 
 pub enum ClientKind {
     Library,
