@@ -116,6 +116,11 @@ impl PlaybackClient for LibraryClient {
         }
     }
 
+    fn select_last_track(&self, table_state: &mut TableState) {
+        let max = self.audio_tracks.len();
+        table_state.select(Some(max - 1));
+    }
+
     fn select_prev_track(&self, table_state: &mut TableState) {
         match table_state.selected() {
             Some(index) => {

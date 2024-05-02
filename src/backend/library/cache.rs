@@ -1,6 +1,6 @@
 use crate::backend::library::{
     hash::{hash_file, HashKind},
-    AlbumDate, AudioTrack,
+    sort_library, AlbumDate, AudioTrack,
 };
 use crate::backend::utils::empty_to_option;
 use crate::dotfile::DotfileSchema;
@@ -26,10 +26,11 @@ pub fn try_load_cache<P: AsRef<Path>>(path: P) -> Result<Vec<AudioTrack>, AppErr
         .delimiter(b';')
         .has_headers(false)
         .from_path(path)?;
-    let tracks = rdr
+    let mut tracks = rdr
         .records()
         .flat_map(|record| record?.try_into())
         .collect::<Vec<AudioTrack>>();
+    sort_library(&mut tracks)?;
     Ok(tracks)
 }
 

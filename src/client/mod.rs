@@ -32,6 +32,7 @@ pub trait PlaybackClient {
 
     fn select_next_track(&self, table_state: &mut TableState);
     fn select_prev_track(&self, table_state: &mut TableState);
+    fn select_last_track(&self, table_state: &mut TableState);
     fn pause_unpause(&self);
     fn update_lib(&mut self, self_arc: Option<Arc<Mutex<Self>>>);
 
