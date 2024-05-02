@@ -8,8 +8,7 @@ author = ["Othi <mnpq.raven@gmail.com>"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-net = "2.0.0"
-audiotags = { path = "../audiotags" }
+audiotags = { git = "https://github.com/mnpqraven/audiotags" }
 base16ct = { version = "0.2.0", features = ["alloc"] }
 chrono = "0.4.38"
 clap = { version = "4.5.4", features = ["derive"] }
@@ -17,7 +16,6 @@ crossterm = { version = "0.27.0", features = ["event-stream"] }
 csv = "1.3.0"
 dirs = "5.0.1"
 futures = "0.3.30"
-futures-lite = "2.3.0"
 murmur3 = "0.5.2"
 ratatui = "0.25.0"
 rodio = "0.17.3"
@@ -26,7 +24,6 @@ sha2 = "0.10.8"
 strum = { version = "0.26.2", features = ["derive"] }
 thiserror = "1.0.59"
 tokio = { version = "1.37.0", features = ["full"] }
-tokio-util = "0.7.10"
 toml = "0.8.12"
 tracing = "0.1.40"
 tracing-appender = "0.2.3"

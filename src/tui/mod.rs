@@ -3,6 +3,7 @@ use self::types::AppState;
 use crate::client::PlaybackClient;
 use crate::error::AppError;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
+use crossterm::execute;
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::backend::Backend;
 use ratatui::widgets::Widget;
@@ -43,7 +44,7 @@ impl<B: Backend> Tui<B> {
     /// It enables the raw mode and sets terminal properties.
     pub fn init(&mut self) -> Result<(), AppError> {
         terminal::enable_raw_mode()?;
-        crossterm::execute!(io::stderr(), EnterAlternateScreen, EnableMouseCapture)?;
+        execute!(io::stderr(), EnterAlternateScreen, EnableMouseCapture)?;
 
         // Define a custom panic hook to reset the terminal properties.
         // This way, you won't have your terminal messed up if an unexpected error happens.
@@ -78,7 +79,7 @@ impl<B: Backend> Tui<B> {
     /// the terminal properties if unexpected errors occur.
     fn reset() -> Result<(), AppError> {
         terminal::disable_raw_mode()?;
-        crossterm::execute!(io::stderr(), LeaveAlternateScreen, DisableMouseCapture)?;
+        execute!(io::stderr(), LeaveAlternateScreen, DisableMouseCapture)?;
         Ok(())
     }
 

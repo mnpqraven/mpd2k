@@ -1,10 +1,8 @@
-use std::time::Duration;
-
+use crate::error::AppError;
 use crossterm::event::{Event as CrosstermEvent, KeyEvent, MouseEvent};
 use futures::{FutureExt, StreamExt};
+use std::time::Duration;
 use tokio::sync::mpsc;
-
-use crate::error::AppError;
 
 /// Terminal events.
 #[derive(Clone, Copy, Debug)]
