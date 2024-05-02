@@ -47,12 +47,7 @@ pub fn handle_key_events<Client: PlayableClient>(
         KeyCode::Char('q') => app.exit(),
         KeyCode::Char('u') => {
             // not loading
-            if app
-                .client
-                .inner
-                .try_lock()
-                .is_ok_and(|client| !client.loading())
-            {
+            if app.client.try_get().is_ok_and(|client| !client.loading()) {
                 app.client.update_lib()?;
             }
         }
