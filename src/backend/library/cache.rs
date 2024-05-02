@@ -5,7 +5,7 @@ use crate::backend::library::{
 use crate::backend::utils::empty_to_option;
 use crate::dotfile::DotfileSchema;
 use crate::error::AppError;
-use csv::Writer;
+use csv::{StringRecord, Writer};
 use futures::future::join_all;
 use std::path::Path;
 use std::{
@@ -28,20 +28,7 @@ pub fn try_load_cache<P: AsRef<Path>>(path: P) -> Result<Vec<AudioTrack>, AppErr
         .from_path(path)?;
     let tracks = rdr
         .records()
-        .flat_map(|record| {
-            let record = record?;
-
-            Ok::<AudioTrack, AppError>(AudioTrack {
-                name: record[0].to_string(),
-                path: record[1].to_string(),
-                track_no: empty_to_option(&record[2]),
-                artist: empty_to_option(&record[3]),
-                album: empty_to_option(&record[4]),
-                album_artist: empty_to_option(&record[5]),
-                date: AlbumDate::parse(&record[6]),
-                binary_hash: empty_to_option(&record[7]),
-            })
-        })
+        .flat_map(|record| record?.try_into())
         .collect::<Vec<AudioTrack>>();
     Ok(tracks)
 }
@@ -85,6 +72,8 @@ pub async fn try_write_cache<P: AsRef<Path>>(
     Ok(())
 }
 
+/// this function handles hash lookup and writing the track metadata to the csv
+/// file
 fn write_fn(track: AudioTrack, writer: Arc<Mutex<Writer<File>>>) {
     let hash = match &track.binary_hash {
         Some(hash) => Some(hash.to_string()),
@@ -113,4 +102,25 @@ fn as_record(hash: String, track: &AudioTrack) -> [String; 8] {
             .unwrap_or_default(),
         hash,
     ]
+}
+
+impl TryFrom<StringRecord> for AudioTrack {
+    type Error = AppError;
+
+    fn try_from(record: StringRecord) -> Result<Self, Self::Error> {
+        if record.len() != 8 {
+            return Err(AppError::CsvParse);
+        }
+
+        Ok(AudioTrack {
+            name: record[0].to_string(),
+            path: record[1].to_string(),
+            track_no: empty_to_option(&record[2]),
+            artist: empty_to_option(&record[3]),
+            album: empty_to_option(&record[4]),
+            album_artist: empty_to_option(&record[5]),
+            date: AlbumDate::parse(&record[6]),
+            binary_hash: empty_to_option(&record[7]),
+        })
+    }
 }

@@ -28,7 +28,7 @@ pub struct EventHandler {
     /// Event receiver channel.
     receiver: mpsc::UnboundedReceiver<Event>,
     /// Event handler thread.
-    handler: tokio::task::JoinHandle<()>,
+    handler: tokio::task::JoinHandle<Result<(), AppError>>,
 }
 
 impl EventHandler {
@@ -73,6 +73,7 @@ impl EventHandler {
                   }
                 };
             }
+            Ok::<(), AppError>(())
         });
         Self {
             sender,

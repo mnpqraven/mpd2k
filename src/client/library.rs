@@ -90,7 +90,7 @@ impl PlaybackClient for LibraryClient {
 
         self.current_track = Some(CurrentTrack {
             data: track.clone(),
-            duration: source.total_duration().unwrap(),
+            duration: source.total_duration().unwrap_or_default(),
         });
 
         let _ = self
@@ -154,26 +154,24 @@ impl PlaybackClient for LibraryClient {
             && !self.loading
         {
             self.set_loading(true);
-            let handle = self.hashing_rt.handle().clone();
-            let handle_for_inner = handle.clone();
+            let handle = self.hashing_rt.handle();
+            let (hash_handle, hash_handle_inner) = (handle.clone(), handle.clone());
 
             self.hashing_rt.spawn(async move {
-                let cfg = DotfileSchema::parse().unwrap();
-                let tracks = load_all_tracks_unhashed(&cfg, self_arc.clone()).unwrap();
-
-                handle.spawn(async move {
-                    // let _ = try_write_cache(&DotfileSchema::cache_path().unwrap(), &tracks).await;
-                    let _ = try_write_cache(
-                        &DotfileSchema::cache_path().unwrap(),
-                        &tracks,
-                        handle_for_inner,
-                    )
-                    .await;
-                });
-
+                let cfg = DotfileSchema::parse()?;
+                let tracks = load_all_tracks_unhashed(&cfg, self_arc.clone())?;
                 if let Ok(mut lib) = self_arc.lock() {
                     lib.set_loading(false);
                 }
+
+                // background hashing and caching
+                hash_handle.spawn(async move {
+                    try_write_cache(&DotfileSchema::cache_path()?, &tracks, hash_handle_inner)
+                        .await?;
+                    Ok::<(), AppError>(())
+                });
+
+                Ok::<(), AppError>(())
             });
         }
     }

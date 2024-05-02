@@ -2,7 +2,7 @@ use crate::{
     backend::utils::is_supported_audio,
     client::{library::LibraryClient, PlayableAudio},
     dotfile::DotfileSchema,
-    error::AppError,
+    error::{AppError, LibraryError},
 };
 use audiotags::Tag;
 use chrono::{Datelike, NaiveDate};
@@ -93,25 +93,7 @@ pub fn load_all_tracks_unhashed(
             // TODO:
             // separate thread
             // most expensive work
-            let tag = Tag::new().read_from_path(&path)?;
-            let name = tag.title().unwrap_or(&filename).to_string();
-            let album = tag.album_title().map(|e| e.to_owned());
-            let artist = tag.artist().map(|e| e.to_owned());
-            let date = tag.date_raw().and_then(AlbumDate::parse);
-            let album_artist = tag.album_artist().map(|e| e.to_owned());
-            let track_no = tag.track_number();
-
-            let track = AudioTrack {
-                name,
-                path,
-                track_no,
-                // _meta: entry,
-                artist,
-                date,
-                album,
-                album_artist,
-                binary_hash: None,
-            };
+            let track = read_tag(path, &filename)?;
 
             // we only lock after the tags lookup is completed
             let mut tree_guard = tree_arc.lock()?;
@@ -138,6 +120,29 @@ pub fn load_all_tracks_unhashed(
     Ok(tree_guard.audio_tracks.to_vec())
 }
 
+fn read_tag(path: String, filename: &str) -> Result<AudioTrack, LibraryError> {
+    let tag = Tag::new().read_from_path(&path)?;
+    let name = tag.title().unwrap_or(filename).to_string();
+    let album = tag.album_title().map(|e| e.to_owned());
+    let artist = tag.artist().map(|e| e.to_owned());
+    let date = tag.date_raw().and_then(AlbumDate::parse);
+    let album_artist = tag.album_artist().map(|e| e.to_owned());
+    let track_no = tag.track_number();
+
+    let track = AudioTrack {
+        name,
+        path,
+        track_no,
+        // _meta: entry,
+        artist,
+        date,
+        album,
+        album_artist,
+        binary_hash: None,
+    };
+    Ok(track)
+}
+
 pub fn sort_library(tracks: &mut [AudioTrack]) -> Result<(), AppError> {
     // album_artist > year > album name > track no
     tracks.sort_unstable_by_key(|item| {
@@ -154,7 +159,7 @@ pub fn sort_library(tracks: &mut [AudioTrack]) -> Result<(), AppError> {
 
 pub fn create_source<P: AsRef<Path>>(path: P) -> Result<Decoder<BufReader<File>>, AppError> {
     let file = BufReader::new(File::open(path)?);
-    let source = Decoder::new(file)?;
+    let source = Decoder::new(file).map_err(LibraryError::DecoderError)?;
     Ok(source)
 }
 

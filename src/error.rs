@@ -7,34 +7,49 @@ pub enum AppError {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Csv(#[from] csv::Error),
+    #[error("bad csv entry")]
+    CsvParse,
 
     #[error("The mutex was poisoned")]
     PoisonError(String),
 
     #[error(transparent)]
-    DecoderError(#[from] DecoderError),
-
-    #[error(transparent)]
     Walkdir(#[from] walkdir::Error),
 
     #[error(transparent)]
-    LibraryMetadata(#[from] audiotags::Error),
+    LibraryClient(#[from] LibraryError),
     #[error(transparent)]
-    LibraryPlayback(#[from] rodio::PlayError),
-    // #[error(transparent)]
-    // MpdPlayback,
+    MpdClient(#[from] MpdError),
+
     #[error("This feature is not yet unimplemented")]
     Unimplemented,
-    #[error("MPD connection error: {0}")]
-    MpdClient(String),
-    #[error("MPD server returned (data, error): ({0:?} {1})")]
-    MpdProtocol(Vec<String>, String),
     #[error("No dotfile configuration found")]
     NoConfig,
     #[error("Bad dotfile configuration")]
     BadConfig,
     #[error("Not supported for this platform")]
     NotSupported,
+
+    #[error("Bad unwrap: {0:?}")]
+    BadUnwrap(Option<String>),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum LibraryError {
+    #[error(transparent)]
+    LibraryMetadata(#[from] audiotags::Error),
+    #[error(transparent)]
+    LibraryPlayback(#[from] rodio::PlayError),
+    #[error(transparent)]
+    DecoderError(#[from] DecoderError),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum MpdError {
+    #[error("MPD connection error: {0}")]
+    MpdClient(String),
+    #[error("MPD server returned (data, error): ({0:?} {1})")]
+    MpdProtocol(Vec<String>, String),
 }
 
 impl<T> From<std::sync::PoisonError<T>> for AppError {

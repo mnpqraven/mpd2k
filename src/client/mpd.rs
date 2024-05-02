@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use crate::error::{AppError, MpdError};
 use std::fmt::Debug;
 use tokio::{
     io::{split, AsyncBufReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
@@ -44,7 +44,7 @@ impl MpdClient {
 
         // expects OK MPD [version] or ACK [reasons]
         if !buf.starts_with("OK MPD ") {
-            return Err(AppError::MpdClient(format!("[init connection] {}", buf)));
+            return Err(MpdError::MpdClient(format!("[init connection] {}", buf)).into());
         }
 
         info!("MPD client connected");
@@ -68,7 +68,7 @@ impl MpdClient {
                     return Ok(messages);
                 }
                 (_, true) => {
-                    return Err(AppError::MpdProtocol(messages, line));
+                    return Err(MpdError::MpdProtocol(messages, line).into());
                 }
             };
         }
