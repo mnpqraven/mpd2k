@@ -1,4 +1,4 @@
-use super::{events::PlaybackEvent, ClientKind, PlaybackClient};
+use super::{events::PlaybackEvent, ClientKind, PlayableClient};
 use crate::{
     backend::library::{
         cache::{try_load_cache, try_write_cache},
@@ -75,7 +75,7 @@ impl LibraryClient {
     }
 }
 
-impl PlaybackClient for LibraryClient {
+impl PlayableClient for LibraryClient {
     fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
         Self::new(playback_tx)
     }

@@ -73,7 +73,7 @@ async fn main() -> Result<(), AppError> {
     }
 
     // STDOUT CLEANUP
-    if let Some(Ok(lib)) = Arc::into_inner(app.library_client).map(|e| e.into_inner()) {
+    if let Some(Ok(lib)) = Arc::into_inner(app.client.inner).map(|e| e.into_inner()) {
         LibraryClient::cleanup(lib);
     }
     playback_rt.shutdown_background();

@@ -4,7 +4,7 @@ mod playback;
 
 use self::{config::ConfigContainer, help::HelpContainer, playback::PlaybackContainer};
 use super::app::{AppState, NavigationRoute, NavigationState};
-use crate::client::{library::LibraryClient, PlaybackClient};
+use crate::client::{library::LibraryClient, PlayableClient};
 use ratatui::{
     prelude::*,
     widgets::{TableState, *},
@@ -15,7 +15,7 @@ use strum::IntoEnumIterator;
 // NOTE: is it better to refactor `render` mod to have file-based routing
 impl<Client> Widget for &AppState<Client>
 where
-    Client: PlaybackClient,
+    Client: PlayableClient,
     for<'a> &'a Client: StatefulWidget<State = TableState>,
 {
     /// TODO:
@@ -53,7 +53,12 @@ where
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis();
-        let is_loading = self.library_client.lock().map(|e| e.loading()).unwrap();
+        let is_loading = self
+            .client
+            .inner
+            .lock()
+            .map(|e| e.loading())
+            .unwrap();
 
         // NAVBAR
         self.navigation.render(split_navbar_mainbox[0], buf);

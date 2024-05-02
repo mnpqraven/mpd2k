@@ -20,6 +20,7 @@ use walkdir::WalkDir;
 pub mod cache;
 pub mod hash;
 
+
 // NOTE: keep expanding this or migrate to album(outer struct) > tracks(inner struct)
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct AudioTrack {

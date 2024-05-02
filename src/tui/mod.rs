@@ -1,6 +1,6 @@
 use self::app::AppState;
 use self::events::EventHandler;
-use crate::client::PlaybackClient;
+use crate::client::PlayableClient;
 use crate::error::AppError;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use crossterm::execute;
@@ -65,7 +65,7 @@ impl<B: Backend> Tui<B> {
     /// [`rendering`]: crate::ui::render
     pub fn draw<Client>(&mut self, app: &AppState<Client>) -> Result<(), AppError>
     where
-        Client: PlaybackClient,
+        Client: PlayableClient,
         for<'a> &'a AppState<Client>: Widget,
     {
         self.terminal
