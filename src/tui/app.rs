@@ -1,18 +1,42 @@
-use super::types::{AppState, NavigationRoute, NavigationState, Tui};
-use crate::client::{events::PlaybackEvent, PlaybackClient};
+use crate::client::events::PlaybackEvent;
+use crate::client::PlaybackClient;
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ratatui::prelude::*;
+use ratatui::{backend::CrosstermBackend, widgets::TableState, Terminal};
+use std::io::{self, stdout};
 use std::{
-    io::{self, stdout},
+    io::Stdout,
     sync::{Arc, Mutex},
 };
+use strum::{Display, EnumIter};
 use tokio::sync::mpsc::UnboundedSender;
 
+#[derive(Debug)]
+pub struct AppState<Client: PlaybackClient> {
+    // TODO: state for tab
+    pub navigation: NavigationState,
+    pub library_client: Arc<Mutex<Client>>,
+    pub tui_state: Arc<Mutex<TableState>>,
+    pub exit: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct NavigationState {
+    pub current: NavigationRoute,
+}
+
+#[derive(Debug, Default, EnumIter, Display, PartialEq, Eq)]
+pub enum NavigationRoute {
+    #[default]
+    Playback,
+    Config,
+    Help,
+}
+
 /// Initialize the terminal
-pub fn init() -> io::Result<Tui> {
+pub fn init() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
     execute!(stdout(), EnterAlternateScreen)?;
     enable_raw_mode()?;
     Terminal::new(CrosstermBackend::new(stdout()))

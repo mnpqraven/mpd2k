@@ -1,4 +1,4 @@
-use super::types::*;
+use super::app::{AppState, NavigationRoute};
 use crate::{client::PlaybackClient, error::AppError};
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -23,6 +23,7 @@ pub fn handle_key_events<Client: PlaybackClient>(
 
         KeyCode::Char('1') => app.navigate(NavigationRoute::Playback),
         KeyCode::Char('2') => app.navigate(NavigationRoute::Config),
+        KeyCode::Char('3') => app.navigate(NavigationRoute::Help),
         KeyCode::Char('+') => app.volume_up(),
         KeyCode::Char('-') | KeyCode::Char('=') => app.volume_down(),
         _ => {}
@@ -38,6 +39,7 @@ pub fn handle_key_events<Client: PlaybackClient>(
             _ => {}
         },
         NavigationRoute::Config => {}
+        NavigationRoute::Help => {}
     }
     Ok(())
 }

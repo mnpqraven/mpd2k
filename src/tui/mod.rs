@@ -1,5 +1,5 @@
+use self::app::AppState;
 use self::events::EventHandler;
-use self::types::AppState;
 use crate::client::PlaybackClient;
 use crate::error::AppError;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
@@ -14,8 +14,8 @@ use std::panic;
 pub mod app;
 pub mod events;
 pub mod handler;
+// pub mod render;
 pub mod render;
-pub mod types;
 
 /// Representation of a terminal user interface.
 ///

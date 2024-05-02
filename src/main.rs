@@ -18,10 +18,9 @@ use error::AppError;
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::runtime::Builder;
 use tui::{
-    app::{self},
+    app::{self, AppState},
     events::{Event, EventHandler},
     handler::handle_key_events,
-    types::AppState,
     Tui,
 };
 
@@ -44,10 +43,9 @@ async fn main() -> Result<(), AppError> {
     let playback_tx = playback_server.sender.clone();
     // NOTE: we can access sink data from global app by passing SinkArc into this
     let mut app = AppState::<LibraryClient>::new(playback_tx.clone());
-    // WARN: DATA NEEDS TO BE INIT BEFORE THIS (stateful_tui)
-    // STDOUT INIT
     let backend = CrosstermBackend::new(std::io::stderr());
     let terminal = Terminal::new(backend)?;
+
     // 60 fps
     #[allow(non_snake_case)]
     let TICK_RATE = 16;
@@ -79,7 +77,6 @@ async fn main() -> Result<(), AppError> {
         LibraryClient::cleanup(lib);
     }
     playback_rt.shutdown_background();
-    // TODO:  FIX: hashing thread is not exiting properly
     app::teardown()?;
 
     Ok(())
