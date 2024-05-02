@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 #[allow(non_snake_case)]
-pub fn HelpContainer<Client>(app: &AppState<Client>, area: Rect, buf: &mut Buffer)
+pub fn HelpContainer<Client>(_app: &AppState<Client>, area: Rect, buf: &mut Buffer)
 where
     Client: PlayableClient,
     for<'a> &'a Client: StatefulWidget<State = TableState>,

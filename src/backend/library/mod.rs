@@ -1,7 +1,6 @@
 use crate::{
     backend::utils::is_supported_audio,
     client::{library::LibraryClient, PlayableAudio},
-    dotfile::DotfileSchema,
     error::{AppError, LibraryError},
 };
 use audiotags::Tag;
@@ -40,6 +39,7 @@ pub struct AlbumDate {
     pub month: Option<u8>,
     pub day: Option<u8>,
 }
+
 impl AlbumDate {
     fn parse(text: &str) -> Option<Self> {
         // TODO: more formats
@@ -53,6 +53,7 @@ impl AlbumDate {
         }
     }
 }
+
 impl Display for AlbumDate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = self.year.to_string();
@@ -72,13 +73,16 @@ impl PlayableAudio for &AudioTrack {
     }
 }
 
-pub fn load_all_tracks_unhashed(
-    config: &DotfileSchema,
+pub fn load_all_tracks_unhashed<P: AsRef<Path>>(
+    lib_root: P,
     tree_arc: Arc<Mutex<LibraryClient>>,
+    hard_update: bool,
 ) -> Result<Vec<AudioTrack>, AppError> {
-    let root = config.library_root()?;
+    if hard_update {
+        tree_arc.lock().map(|mut e| e.audio_tracks = vec![])?;
+    }
 
-    let library_tree = WalkDir::new(root).follow_links(true);
+    let library_tree = WalkDir::new(lib_root).follow_links(true);
 
     let mut current_dir = PathBuf::new();
 
@@ -92,11 +96,14 @@ pub fn load_all_tracks_unhashed(
         if is_supported_audio(&path) {
             // TODO:
             // separate thread
-            // most expensive work
+            // 2nd most expensive work
             let track = read_tag(path, &filename)?;
 
             // we only lock after the tags lookup is completed
             let mut tree_guard = tree_arc.lock()?;
+
+            // FIX: this push is won't erase all the existing tracks and avoid
+            // layout shift, but also won't clear out invalid tracks
             tree_guard.audio_tracks.push(track);
             // sort after every album
             if current_dir.as_path().ne(entry.path()) {

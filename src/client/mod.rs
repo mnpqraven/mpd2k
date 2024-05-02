@@ -34,7 +34,7 @@ pub trait PlayableClient {
     fn select_prev_track(&self, table_state: &mut TableState);
     fn select_last_track(&self, table_state: &mut TableState);
     fn pause_unpause(&self);
-    fn update_lib(&mut self, self_arc: Option<Arc<Mutex<Self>>>);
+    fn update_lib(&mut self, self_arc: Option<Arc<Mutex<Self>>>, hard_update: bool);
 
     fn volume_percentage(&self) -> u8;
     fn volume_up(&mut self);
@@ -81,10 +81,10 @@ where
     ///
     /// For library the directory is fully loaded unhashed then a
     /// hashing worker is queued in the background
-    pub fn update_lib(&mut self) -> Result<(), AppError> {
+    pub fn update_lib(&mut self, hard_update: bool) -> Result<(), AppError> {
         let arced = self.inner.clone();
         let mut inner = self.inner.lock()?;
-        inner.update_lib(Some(arced));
+        inner.update_lib(Some(arced), hard_update);
         Ok(())
     }
 

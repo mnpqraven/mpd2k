@@ -6,14 +6,12 @@ use crate::backend::utils::empty_to_option;
 use crate::dotfile::DotfileSchema;
 use crate::error::AppError;
 use csv::{StringRecord, Writer};
-use futures::future::join_all;
 use std::path::Path;
 use std::{
     fs::File,
     sync::{Arc, Mutex},
 };
-use tokio::runtime::Handle;
-use tokio::task::JoinHandle;
+use tokio::{runtime::Handle, task::JoinSet};
 use tracing::info;
 
 /// try to read from csv cache, else load directly from dir
@@ -35,7 +33,7 @@ pub fn try_load_cache<P: AsRef<Path>>(path: P) -> Result<Vec<AudioTrack>, AppErr
 }
 
 /// this will hash the file if hash is not present
-pub async fn try_write_cache<P: AsRef<Path>>(
+pub async fn try_write_cache_parallel<P: AsRef<Path>>(
     cache_path: P,
     tracks: &[AudioTrack],
     handle: Handle,
@@ -59,15 +57,51 @@ pub async fn try_write_cache<P: AsRef<Path>>(
         .unwrap();
     let writer = Arc::new(Mutex::new(writer));
 
-    let mut futs: Vec<JoinHandle<()>> = vec![];
+    let mut futs = JoinSet::new();
     for track in tracks {
         let track = track.clone();
         let writer_inner = writer.clone();
-        let handle = handle.spawn(async move { write_fn(track, writer_inner) });
-        futs.push(handle);
+        futs.spawn_on(async move { write_fn(track, writer_inner) }, &handle);
     }
 
-    let _ = join_all(futs).await;
+    while let Some(item) = futs.join_next().await {
+        let () = item.unwrap();
+    }
+
+    info!("update_cache complete");
+    Ok(())
+}
+
+/// this will hash the file if hash is not present
+pub async fn try_write_cache_serial<P: AsRef<Path>>(
+    cache_path: P,
+    tracks: &[AudioTrack],
+    _handle: Handle,
+) -> Result<(), AppError> {
+    // force full scan
+    // TODO: does not force full scan, but check hash of existing file
+    // if match then go next line
+    // if mismatch then replace line with new hash + info
+    if cache_path.as_ref().exists() {
+        info!("removing cache file");
+        tokio::fs::remove_file(&cache_path).await?;
+    }
+
+    // writer
+    // NOTE: this needs to be a single writer to keep track of the file index
+    // pass around threads using usual Arc<Mutex<T>>
+    let writer = csv::WriterBuilder::new()
+        .delimiter(b';')
+        .from_path(DotfileSchema::cache_path().unwrap())
+        .map_err(|_| AppError::BadConfig)
+        .unwrap();
+    let writer = Arc::new(Mutex::new(writer));
+
+    for track in tracks {
+        let track = track.clone();
+        let writer_inner = writer.clone();
+        write_fn(track, writer_inner);
+    }
 
     info!("update_cache complete");
     Ok(())
@@ -78,13 +112,17 @@ pub async fn try_write_cache<P: AsRef<Path>>(
 fn write_fn(track: AudioTrack, writer: Arc<Mutex<Writer<File>>>) {
     let hash = match &track.binary_hash {
         Some(hash) => Some(hash.to_string()),
-        None => hash_file(&track.path, HashKind::Murmur).ok(),
+        None => hash_file(&track.path, HashKind::XxHash).ok(),
     };
 
     if let Some(hash) = hash {
-        info!("wirting hash for {}", track.path);
         let record = as_record(hash, &track);
-        let _ = writer.lock().map(|mut writer| writer.write_record(record));
+        let _ = writer.lock().map(|mut writer| {
+            writer.write_record(record)?;
+            writer.flush()?;
+            info!("wrote hash for {}", track.name);
+            Ok::<(), AppError>(())
+        });
     }
 }
 

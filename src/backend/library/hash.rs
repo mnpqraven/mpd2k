@@ -5,28 +5,34 @@ use std::{
     fmt::Debug,
     fs::{self, File},
     path::Path,
+    time::Instant,
 };
 use strum::Display;
-use tracing::info;
+use tracing::{info, instrument};
+use xxhash_rust::xxh3::xxh3_64;
 
 #[allow(dead_code)]
 #[derive(Debug, Display)]
 pub(super) enum HashKind {
     Sha256,
     Murmur,
+    XxHash,
 }
 
 /// hash a binary file
+#[instrument(ret)]
 pub(super) fn hash_file<T: AsRef<Path> + Debug>(
     file: T,
     kind: HashKind,
 ) -> Result<String, AppError> {
-    info!("hashing {:?} using {kind} started", file);
+    let now = Instant::now();
     let hash = match kind {
         HashKind::Sha256 => get_hash_sha256(&file),
         HashKind::Murmur => get_hash_murmur_64(&file),
+        HashKind::XxHash => get_hash_xx(&file),
     };
-    info!("hashed {:?} using {kind} done: {:?}", file, hash);
+    let elapsed = now.elapsed().as_millis();
+    info!("{elapsed} ms - {} s", (elapsed as f64) / 1000.0);
     hash
 }
 
@@ -48,4 +54,10 @@ pub fn get_hash_murmur_64<T: AsRef<Path> + Debug>(file: T) -> Result<String, App
     let mut file = File::open(file).unwrap();
     let res = murmur3_x64_128(&mut file, 0).unwrap();
     Ok(res.to_string())
+}
+
+pub fn get_hash_xx<T: AsRef<Path> + Debug>(file: T) -> Result<String, AppError> {
+    let bytes = fs::read(file)?;
+    let hash = xxh3_64(&bytes);
+    Ok(hash.to_string())
 }

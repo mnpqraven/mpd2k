@@ -3,7 +3,7 @@ name = "mpd2k"
 version = "0.1.0"
 edition = "2021"
 description = "Cross-platform minimal music client with MPD support on Linux"
-author = ["Othi <mnpq.raven@gmail.com>"]
+authors = ["Othi <mnpq.raven@gmail.com>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -29,3 +29,4 @@ tracing = "0.1.40"
 tracing-appender = "0.2.3"
 tracing-subscriber = "0.3.18"
 walkdir = "2.5.0"
+xxhash-rust = { version = "0.8.10", features = ["xxh3"] }

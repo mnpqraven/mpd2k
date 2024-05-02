@@ -48,7 +48,13 @@ pub fn handle_key_events<Client: PlayableClient>(
         KeyCode::Char('u') => {
             // not loading
             if app.client.try_get().is_ok_and(|client| !client.loading()) {
-                app.client.update_lib()?;
+                app.client.update_lib(false)?;
+            }
+        }
+        KeyCode::Char('U') => {
+            // not loading
+            if app.client.try_get().is_ok_and(|client| !client.loading()) {
+                app.client.update_lib(true)?;
             }
         }
 

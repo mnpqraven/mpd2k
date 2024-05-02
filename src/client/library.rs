@@ -1,7 +1,7 @@
 use super::{events::PlaybackEvent, ClientKind, PlayableClient};
 use crate::{
     backend::library::{
-        cache::{try_load_cache, try_write_cache},
+        cache::{try_load_cache, try_write_cache_parallel},
         create_source, load_all_tracks_unhashed, AudioTrack,
     },
     dotfile::DotfileSchema,
@@ -13,7 +13,12 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tokio::{runtime::Runtime, sync::mpsc::UnboundedSender};
+use tokio::{
+    runtime::{Builder, Runtime},
+    sync::mpsc::UnboundedSender,
+    time::Instant,
+};
+use tracing::info;
 
 #[derive(Debug)]
 pub struct LibraryClient {
@@ -65,7 +70,13 @@ impl LibraryClient {
             loading: false,
             volume: 1.0,
             current_track: None,
-            hashing_rt: Runtime::new().unwrap(),
+            hashing_rt: Builder::new_multi_thread()
+                // ensure hash is written in reasonable amount of time
+                // for 20~50Mb FLACs
+                .worker_threads(12)
+                .thread_name("hashing-worker")
+                .build()
+                .expect("Creating a tokio runtime on 12 threads"),
             playback_tx,
         }
     }
@@ -156,7 +167,7 @@ impl PlayableClient for LibraryClient {
 
     /// TODO: impl hash compare
     /// track list also need hash sort and dedup
-    fn update_lib(&mut self, self_arc: Option<Arc<Mutex<LibraryClient>>>) {
+    fn update_lib(&mut self, self_arc: Option<Arc<Mutex<LibraryClient>>>, hard_update: bool) {
         if let Some(self_arc) = self_arc
             && !self.loading
         {
@@ -165,18 +176,26 @@ impl PlayableClient for LibraryClient {
             let (hash_handle, hash_handle_inner) = (handle.clone(), handle.clone());
 
             self.hashing_rt.spawn(async move {
-                let cfg = DotfileSchema::parse()?;
+                let lib_root = DotfileSchema::parse()?.library_root()?;
                 // NOTE: being sorted by album, etc.. here
-                let tracks = load_all_tracks_unhashed(&cfg, self_arc.clone())?;
+                let tracks = load_all_tracks_unhashed(lib_root, self_arc.clone(), hard_update)?;
                 if let Ok(mut lib) = self_arc.lock() {
                     lib.set_loading(false);
                 }
 
                 // background hashing and caching
                 hash_handle.spawn(async move {
+                    let now = Instant::now();
                     // NOTE: should sort by hash here ?
-                    try_write_cache(&DotfileSchema::cache_path()?, &tracks, hash_handle_inner)
-                        .await?;
+                    try_write_cache_parallel(
+                        &DotfileSchema::cache_path()?,
+                        &tracks,
+                        hash_handle_inner,
+                    )
+                    .await?;
+
+                    let elapsed = now.elapsed().as_millis();
+                    info!("try_write_cache DONE {elapsed} ms");
                     Ok::<(), AppError>(())
                 });
 
