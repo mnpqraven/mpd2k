@@ -1,7 +1,7 @@
 use super::{events::PlaybackEvent, ClientKind, PlaybackClient};
 use crate::{
     backend::library::{
-        cache::{try_load_cache, try_write_cache_multithread},
+        cache::{try_load_cache, try_write_cache},
         create_source, load_all_tracks_unhashed, AudioTrack,
     },
     dotfile::DotfileSchema,
@@ -163,7 +163,7 @@ impl PlaybackClient for LibraryClient {
 
                 handle.spawn(async move {
                     // let _ = try_write_cache(&DotfileSchema::cache_path().unwrap(), &tracks).await;
-                    let _ = try_write_cache_multithread(
+                    let _ = try_write_cache(
                         &DotfileSchema::cache_path().unwrap(),
                         &tracks,
                         handle_for_inner,
