@@ -20,7 +20,6 @@ use walkdir::WalkDir;
 pub mod cache;
 pub mod hash;
 
-
 // NOTE: keep expanding this or migrate to album(outer struct) > tracks(inner struct)
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct AudioTrack {
@@ -101,6 +100,8 @@ pub fn load_all_tracks_unhashed(
             tree_guard.audio_tracks.push(track);
             // sort after every album
             if current_dir.as_path().ne(entry.path()) {
+                // NOTE: is this actually necessary after we implement
+                // appending by folders ?
                 sort_library(&mut tree_guard.audio_tracks)?;
                 // final dedup or after sort
 

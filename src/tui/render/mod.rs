@@ -53,12 +53,8 @@ where
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis();
-        let is_loading = self
-            .client
-            .inner
-            .lock()
-            .map(|e| e.loading())
-            .unwrap();
+        // TODO: safe unwrap
+        let is_loading = self.client.get().unwrap().loading();
 
         // NAVBAR
         self.navigation.render(split_navbar_mainbox[0], buf);

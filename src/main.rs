@@ -7,8 +7,6 @@ pub mod dotfile;
 pub mod error;
 pub mod tui;
 
-use std::sync::Arc;
-
 use client::{
     events::{PlaybackEvent, PlaybackServer},
     library::LibraryClient,
@@ -73,9 +71,7 @@ async fn main() -> Result<(), AppError> {
     }
 
     // STDOUT CLEANUP
-    if let Some(Ok(lib)) = Arc::into_inner(app.client.inner).map(|e| e.into_inner()) {
-        LibraryClient::cleanup(lib);
-    }
+    app.client.teardown()?;
     playback_rt.shutdown_background();
     app::teardown()?;
 

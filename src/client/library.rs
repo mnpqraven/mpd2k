@@ -154,6 +154,8 @@ impl PlayableClient for LibraryClient {
         &self.audio_tracks
     }
 
+    /// TODO: impl hash compare
+    /// track list also need hash sort and dedup
     fn update_lib(&mut self, self_arc: Option<Arc<Mutex<LibraryClient>>>) {
         if let Some(self_arc) = self_arc
             && !self.loading
@@ -164,6 +166,7 @@ impl PlayableClient for LibraryClient {
 
             self.hashing_rt.spawn(async move {
                 let cfg = DotfileSchema::parse()?;
+                // NOTE: being sorted by album, etc.. here
                 let tracks = load_all_tracks_unhashed(&cfg, self_arc.clone())?;
                 if let Ok(mut lib) = self_arc.lock() {
                     lib.set_loading(false);
@@ -171,6 +174,7 @@ impl PlayableClient for LibraryClient {
 
                 // background hashing and caching
                 hash_handle.spawn(async move {
+                    // NOTE: should sort by hash here ?
                     try_write_cache(&DotfileSchema::cache_path()?, &tracks, hash_handle_inner)
                         .await?;
                     Ok::<(), AppError>(())
@@ -187,5 +191,9 @@ impl PlayableClient for LibraryClient {
 
     fn volume_percentage(&self) -> u8 {
         (self.volume * 100.0).round() as u8
+    }
+
+    fn cleanup(self) {
+        self.hashing_rt.shutdown_background();
     }
 }

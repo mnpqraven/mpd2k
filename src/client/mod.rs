@@ -45,6 +45,7 @@ pub trait PlayableClient {
     // queue next
     // seek
     fn kind(&self) -> ClientKind;
+    fn cleanup(self);
 }
 
 #[derive(Debug)]
@@ -52,7 +53,7 @@ pub struct PlaybackClient<Client>
 where
     Client: PlayableClient,
 {
-    pub inner: Arc<Mutex<Client>>,
+    inner: Arc<Mutex<Client>>,
 }
 
 impl<Client> PlaybackClient<Client>
@@ -84,6 +85,16 @@ where
         let arced = self.inner.clone();
         let mut inner = self.inner.lock()?;
         inner.update_lib(Some(arced));
+        Ok(())
+    }
+
+    // consume self, returning inner struct data
+    pub fn teardown(self) -> Result<(), AppError> {
+        Arc::into_inner(self.inner)
+            .map(|e| e.into_inner())
+            .ok_or(AppError::BadUnwrap(Some("bad arc consume".into())))??
+            .cleanup();
+
         Ok(())
     }
 }
