@@ -34,9 +34,13 @@ where
     where
         Self: Sized,
     {
+        let right_sidebar_width = 25;
         let split_ltr = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints(vec![Constraint::Percentage(75), Constraint::Percentage(25)])
+            .constraints([
+                Constraint::Percentage(100 - right_sidebar_width),
+                Constraint::Percentage(right_sidebar_width),
+            ])
             .split(area);
 
         let split_navbar_mainbox = Layout::default()
@@ -67,7 +71,9 @@ where
         };
 
         // RIGHT SIDEBAR
-        SidebarRight(clock, is_loading, split_ltr[1], buf);
+        if self.tui_state.show_right_sidebar {
+            SidebarRight(clock, is_loading, split_ltr[1], buf);
+        }
     }
 }
 
@@ -75,7 +81,7 @@ where
 fn SidebarRight(clock: u128, loading: bool, area: Rect, buf: &mut Buffer) {
     let loading_str = match loading {
         true => "loading...",
-        false => ""
+        false => "",
     };
     Paragraph::new(format!("{clock}\n{loading_str}"))
         .block(Block::new().borders(Borders::all()))

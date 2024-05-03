@@ -11,14 +11,17 @@ pub fn handle_key_events<Client: PlayableClient>(
     match app.navigation.current {
         NavigationRoute::Playback => match key_event.code {
             KeyCode::Char('l') => {
-                if let Ok(mut tui) = app.tui_state.lock() {
+                if let Ok(mut tui) = app.tui_state.playback_table.lock() {
                     app.client.get()?.select_prev_track(&mut tui)
                 }
             }
             KeyCode::Char('n') => {
-                if let Ok(mut tui) = app.tui_state.lock() {
+                if let Ok(mut tui) = app.tui_state.playback_table.lock() {
                     app.client.get()?.select_next_track(&mut tui)
                 }
+            }
+            KeyCode::Char('I') => {
+                app.tui_state.show_left_sidebar = !app.tui_state.show_left_sidebar;
             }
             // NOTE: not final api, but there should be a char setter like
             // this, and a reader somewhere in the `AppState` impl
@@ -26,13 +29,13 @@ pub fn handle_key_events<Client: PlayableClient>(
                 app.set_multi_key(KeyCode::Char('g'));
             }
             KeyCode::Char('G') => {
-                if let Ok(mut tui) = app.tui_state.lock() {
+                if let Ok(mut tui) = app.tui_state.playback_table.lock() {
                     app.client.get()?.select_last_track(&mut tui);
                 }
             }
             KeyCode::Char('p') => app.client.get()?.pause_unpause(),
             KeyCode::Char('o') => {
-                if let Ok(tui) = app.tui_state.lock() {
+                if let Ok(tui) = app.tui_state.playback_table.lock() {
                     app.client.get()?.play(&tui)?;
                 }
             }
@@ -61,6 +64,9 @@ pub fn handle_key_events<Client: PlayableClient>(
         KeyCode::Char('1') => app.navigate(NavigationRoute::Playback),
         KeyCode::Char('2') => app.navigate(NavigationRoute::Config),
         KeyCode::Char('3') => app.navigate(NavigationRoute::Help),
+        KeyCode::Char('i') => {
+            app.tui_state.show_right_sidebar = !app.tui_state.show_right_sidebar;
+        }
         KeyCode::Char('+') => app.client.get()?.volume_up(),
         KeyCode::Char('-') => app.client.get()?.volume_down(),
         _ => app.flush_multi_key(),

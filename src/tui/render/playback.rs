@@ -19,15 +19,20 @@ where
         .direction(Direction::Vertical)
         .constraints(vec![Constraint::Min(10), Constraint::Length(3)])
         .split(area);
+
+    let left_sidebar_width = 40;
     let mainbox_layout = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .constraints([
+            Constraint::Percentage(left_sidebar_width),
+            Constraint::Percentage(100 - left_sidebar_width),
+        ])
         .split(rect_dir_seeker[0]);
     let mainbox_left = mainbox_layout[0];
     let mainbox_right = mainbox_layout[1];
 
     if let Ok(audio_tree) = app.client.try_get()
-        && let Ok(mut tui_state) = app.tui_state.try_lock()
+        && let Ok(mut tui_state) = app.tui_state.playback_table.try_lock()
     {
         let current_track = tui_state
             .selected()

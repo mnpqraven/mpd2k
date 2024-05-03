@@ -18,8 +18,24 @@ use tokio::sync::mpsc::UnboundedSender;
 pub struct AppState<Client: PlayableClient> {
     pub navigation: NavigationState,
     pub client: PlaybackClient<Client>,
-    pub tui_state: Arc<Mutex<TableState>>,
+    pub tui_state: TuiState,
     pub exit: bool,
+}
+
+#[derive(Debug)]
+pub struct TuiState {
+    pub playback_table: Arc<Mutex<TableState>>,
+    pub show_right_sidebar: bool,
+    pub show_left_sidebar: bool,
+}
+impl Default for TuiState {
+    fn default() -> Self {
+        Self {
+            playback_table: Default::default(),
+            show_right_sidebar: true,
+            show_left_sidebar: true,
+        }
+    }
 }
 
 #[derive(Debug, Default)]
