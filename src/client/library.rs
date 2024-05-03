@@ -1,8 +1,8 @@
 use super::{events::PlaybackEvent, ClientKind, PlayableClient};
 use crate::{
     backend::library::{
-        cache::{try_load_cache, try_write_cache_parallel},
-        create_source, load_all_tracks_unhashed, AudioTrack,
+        cache::try_load_cache, create_source, inject_hash, inject_metadata, load_all_tracks_raw,
+        AudioTrack,
     },
     dotfile::DotfileSchema,
     error::AppError,
@@ -16,9 +16,7 @@ use std::{
 use tokio::{
     runtime::{Builder, Runtime},
     sync::mpsc::UnboundedSender,
-    time::Instant,
 };
-use tracing::info;
 
 #[derive(Debug)]
 pub struct LibraryClient {
@@ -73,7 +71,7 @@ impl LibraryClient {
             hashing_rt: Builder::new_multi_thread()
                 // ensure hash is written in reasonable amount of time
                 // for 20~50Mb FLACs
-                .worker_threads(12)
+                .worker_threads(8)
                 .thread_name("hashing-worker")
                 .build()
                 .expect("Creating a tokio runtime on 12 threads"),
@@ -173,32 +171,17 @@ impl PlayableClient for LibraryClient {
         {
             self.set_loading(true);
             let handle = self.hashing_rt.handle();
-            let (hash_handle, hash_handle_inner) = (handle.clone(), handle.clone());
+            let hash_handle = handle.clone();
 
             self.hashing_rt.spawn(async move {
                 let lib_root = DotfileSchema::parse()?.library_root()?;
-                // NOTE: being sorted by album, etc.. here
-                let tracks = load_all_tracks_unhashed(lib_root, self_arc.clone(), hard_update)?;
+                load_all_tracks_raw(lib_root, self_arc.clone(), hard_update).await?;
+                inject_metadata(self_arc.clone(), hash_handle.clone()).await?;
+                inject_hash(self_arc.clone(), hash_handle.clone(), true).await?;
+
                 if let Ok(mut lib) = self_arc.lock() {
                     lib.set_loading(false);
                 }
-
-                // background hashing and caching
-                hash_handle.spawn(async move {
-                    let now = Instant::now();
-                    // NOTE: should sort by hash here ?
-                    try_write_cache_parallel(
-                        &DotfileSchema::cache_path()?,
-                        &tracks,
-                        hash_handle_inner,
-                    )
-                    .await?;
-
-                    let elapsed = now.elapsed().as_millis();
-                    info!("try_write_cache DONE {elapsed} ms");
-                    Ok::<(), AppError>(())
-                });
-
                 Ok::<(), AppError>(())
             });
         }

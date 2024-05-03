@@ -1,10 +1,13 @@
+use self::hash::{hash_file, HashKind};
 use crate::{
     backend::utils::is_supported_audio,
     client::{library::LibraryClient, PlayableAudio},
+    dotfile::DotfileSchema,
     error::{AppError, LibraryError},
 };
 use audiotags::Tag;
 use chrono::{Datelike, NaiveDate};
+use csv::StringRecord;
 use rodio::Decoder;
 use std::{
     fmt::Display,
@@ -13,7 +16,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
-use tracing::info;
+use tokio::{runtime::Handle, task::JoinSet};
 use walkdir::WalkDir;
 
 pub mod cache;
@@ -29,7 +32,29 @@ pub struct AudioTrack {
     pub album_artist: Option<String>,
     pub track_no: Option<u16>,
     pub date: Option<AlbumDate>,
-    pub(self) binary_hash: Option<String>,
+    pub binary_hash: Option<String>,
+}
+
+impl AudioTrack {
+    // TODO: perf + unicode check
+    fn new<P: AsRef<Path> + ToString>(path: P) -> Self {
+        let name = path
+            .as_ref()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        Self {
+            name,
+            path: path.to_string(),
+            artist: None,
+            album: None,
+            album_artist: None,
+            track_no: None,
+            date: None,
+            binary_hash: None,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -73,65 +98,127 @@ impl PlayableAudio for &AudioTrack {
     }
 }
 
-pub fn load_all_tracks_unhashed<P: AsRef<Path>>(
+/// only load path and name
+pub async fn load_all_tracks_raw<P: AsRef<Path>>(
     lib_root: P,
     tree_arc: Arc<Mutex<LibraryClient>>,
     hard_update: bool,
-) -> Result<Vec<AudioTrack>, AppError> {
+) -> Result<(), AppError> {
     if hard_update {
         tree_arc.lock().map(|mut e| e.audio_tracks = vec![])?;
     }
 
     let library_tree = WalkDir::new(lib_root).follow_links(true);
-
-    let mut current_dir = PathBuf::new();
-
     for entry in library_tree {
         let entry = entry?;
-        let (filename, path) = (
-            entry.file_name().to_string_lossy().to_string(),
-            entry.path().to_string_lossy().to_string(),
-        );
+        let path = entry.path().to_string_lossy().to_string();
 
         if is_supported_audio(&path) {
-            // TODO:
-            // separate thread
-            // 2nd most expensive work
-            let track = read_tag(path, &filename)?;
-
-            // we only lock after the tags lookup is completed
             let mut tree_guard = tree_arc.lock()?;
+            let trk = AudioTrack::new(path);
+            tree_guard.audio_tracks.push(trk);
+        }
+    }
+    // TODO: filtering duplicate paths
 
-            // FIX: this push is won't erase all the existing tracks and avoid
-            // layout shift, but also won't clear out invalid tracks
-            tree_guard.audio_tracks.push(track);
-            // sort after every album
-            if current_dir.as_path().ne(entry.path()) {
-                // NOTE: is this actually necessary after we implement
-                // appending by folders ?
-                sort_library(&mut tree_guard.audio_tracks)?;
-                // final dedup or after sort
+    drop(tree_arc);
+    Ok(())
+}
 
-                current_dir = PathBuf::from(entry.path());
-            }
-            drop(tree_guard);
+pub async fn inject_metadata(
+    tree_arc: Arc<Mutex<LibraryClient>>,
+    handle: Handle,
+) -> Result<(), AppError> {
+    let tracks = tree_arc
+        .clone()
+        .lock()
+        .map(|lib| lib.audio_tracks.clone())?;
+
+    let mut join_set = JoinSet::new();
+
+    for (index, track) in tracks.into_iter().enumerate() {
+        let arced = tree_arc.clone();
+        let _ = join_set.spawn_on(
+            async move {
+                let trk = read_tag(track.path.clone()).unwrap();
+
+                {
+                    let mut guard = arced.lock().unwrap();
+                    let track = guard
+                        .audio_tracks
+                        .get_mut(index)
+                        .expect("index and size should stay unchanged");
+                    *track = trk;
+                }
+            },
+            &handle,
+        );
+    }
+    while let Some(t) = join_set.join_next().await {
+        let () = t.unwrap();
+    }
+
+    Ok(())
+}
+
+/// [TODO:description]
+///
+/// * `tree_arc`: [TODO:parameter]
+/// * `handle`: handle of the hashing runtime
+/// * `also_write`: wheter if a write action should also be executed after
+/// calculating the hash
+pub async fn inject_hash(
+    lib_arc: Arc<Mutex<LibraryClient>>,
+    handle: Handle,
+    also_write: bool,
+) -> Result<(), AppError> {
+    let tracks = lib_arc.clone().lock().map(|lib| lib.audio_tracks.clone())?;
+
+    let mut join_set = JoinSet::new();
+
+    for (index, track) in tracks.into_iter().enumerate() {
+        let arced = lib_arc.clone();
+        let _ = join_set.spawn_on(
+            async move {
+                let hash = hash_file(track.path.clone(), HashKind::XxHash)?;
+
+                let track = {
+                    // hash insertion
+                    let mut guard = arced.lock().unwrap();
+                    let track = guard
+                        .audio_tracks
+                        .get_mut(index)
+                        .expect("index and size should stay unchanged");
+                    track.binary_hash = Some(hash);
+                    track.clone()
+                };
+                Ok::<AudioTrack, AppError>(track)
+            },
+            &handle,
+        );
+    }
+
+    let mut writer = csv::WriterBuilder::new()
+        .delimiter(b';')
+        .from_path(DotfileSchema::cache_path().unwrap())
+        .map_err(|_| AppError::BadConfig)
+        .unwrap();
+
+    while let Some(Ok(t)) = join_set.join_next().await {
+        if also_write {
+            let record = StringRecord::try_from(&t?).unwrap();
+            writer.write_record(&record)?;
+            writer.flush()?;
         }
     }
 
-    let mut tree_guard = tree_arc.lock()?;
-    sort_library(&mut tree_guard.audio_tracks)?;
-    tree_guard.audio_tracks.dedup();
-    info!(
-        "load_all_tracks_incremental len: {}",
-        tree_guard.audio_tracks.len()
-    );
-
-    Ok(tree_guard.audio_tracks.to_vec())
+    Ok(())
 }
 
-fn read_tag(path: String, filename: &str) -> Result<AudioTrack, LibraryError> {
+/// This function is not cheap, running in parallel is recommended
+fn read_tag(path: String) -> Result<AudioTrack, LibraryError> {
     let tag = Tag::new().read_from_path(&path)?;
-    let name = tag.title().unwrap_or(filename).to_string();
+    let name = tag.title().unwrap_or_default().to_string();
     let album = tag.album_title().map(|e| e.to_owned());
     let artist = tag.artist().map(|e| e.to_owned());
     let date = tag.date_raw().and_then(AlbumDate::parse);
@@ -161,6 +248,8 @@ pub fn sort_library(tracks: &mut [AudioTrack]) -> Result<(), AppError> {
             item.album.clone(),
             item.track_no,
             item.name.clone(),
+            item.binary_hash.clone(),
+            item.path.clone(),
         )
     });
     Ok(())

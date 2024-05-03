@@ -73,7 +73,11 @@ where
 
 #[allow(non_snake_case)]
 fn SidebarRight(clock: u128, loading: bool, area: Rect, buf: &mut Buffer) {
-    Paragraph::new(format!("{clock} {loading}"))
+    let loading_str = match loading {
+        true => "loading...",
+        false => ""
+    };
+    Paragraph::new(format!("{clock}\n{loading_str}"))
         .block(Block::new().borders(Borders::all()))
         .render(area, buf)
 }
