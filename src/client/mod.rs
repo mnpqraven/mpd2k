@@ -16,10 +16,6 @@ pub enum ClientKind {
     Mpd,
 }
 
-pub trait PlayableAudio {
-    fn path(&self) -> PathBuf;
-}
-
 pub trait PlayableClient {
     fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self;
     fn play(&mut self, table_state: &TableState) -> Result<(), AppError>;

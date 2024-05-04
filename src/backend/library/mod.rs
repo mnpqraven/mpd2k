@@ -4,7 +4,7 @@ use self::{
 };
 use crate::{
     backend::utils::is_supported_audio,
-    client::{library::LibraryClient, PlayableAudio},
+    client::library::LibraryClient,
     error::{AppError, LibraryError},
 };
 use ::csv::StringRecord;
@@ -15,7 +15,7 @@ use std::{
     fmt::Display,
     fs::File,
     io::BufReader,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, Mutex},
 };
 use tokio::{runtime::Handle, task::JoinSet};
@@ -92,12 +92,6 @@ impl Display for AlbumDate {
             s.push_str(&format!(".{day}"));
         }
         write!(f, "{}", s)
-    }
-}
-
-impl PlayableAudio for &AudioTrack {
-    fn path(&self) -> PathBuf {
-        PathBuf::from(self.path.clone())
     }
 }
 
