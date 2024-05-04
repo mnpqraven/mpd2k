@@ -34,7 +34,7 @@ where
     where
         Self: Sized,
     {
-        let right_sidebar_width = 25;
+        let right_sidebar_width = self.tui_state.show_right_sidebar as u16 * 25;
         let split_ltr = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([

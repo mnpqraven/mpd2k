@@ -20,7 +20,7 @@ where
         .constraints(vec![Constraint::Min(10), Constraint::Length(3)])
         .split(area);
 
-    let left_sidebar_width = 40;
+    let left_sidebar_width = app.tui_state.show_left_sidebar as u16 * 40;
     let mainbox_layout = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([

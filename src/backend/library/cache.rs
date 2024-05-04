@@ -1,36 +1,40 @@
 use crate::backend::library::{
     hash::{hash_file, HashKind},
-    sort_library, AlbumDate, AudioTrack,
+    sort_library,
+    csv::{app_reader, app_writer_non_append},
+    AlbumDate, AudioTrack,
 };
 use crate::backend::utils::empty_to_option;
-use crate::dotfile::DotfileSchema;
 use crate::error::AppError;
-use csv::{StringRecord, Writer};
+use csv::StringRecord;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::{runtime::Handle, task::JoinSet};
-use tracing::info;
+use tracing::{info, instrument};
 
 /// try to read from csv cache, else load directly from dir
+#[instrument(ret, skip(path))]
 pub fn try_load_cache<P: AsRef<Path>>(path: P) -> Result<Vec<AudioTrack>, AppError> {
     info!("try_load_cache");
     if !path.as_ref().exists() {
         return Ok(Vec::new());
     }
-    let mut rdr = csv::ReaderBuilder::new()
-        .delimiter(b';')
-        .has_headers(false)
-        .from_path(path)?;
+    let mut rdr = app_reader()?;
     let mut tracks = rdr
         .records()
-        .flat_map(|record| record?.try_into())
+        .flat_map(|record| {
+            let t = record?.try_into();
+            info!("{:?}", t);
+            t
+        })
         .collect::<Vec<AudioTrack>>();
-    sort_library(&mut tracks)?;
+    sort_library(&mut tracks);
     Ok(tracks)
 }
 
 /// this will hash the file if hash is not present
-pub async fn try_write_cache_parallel<P: AsRef<Path>>(
+/// TODO: probably not needed
+async fn try_write_cache_parallel<P: AsRef<Path>>(
     cache_path: P,
     tracks_lock: Arc<tokio::sync::Mutex<Vec<AudioTrack>>>,
     handle: Handle,
@@ -47,12 +51,7 @@ pub async fn try_write_cache_parallel<P: AsRef<Path>>(
     // writer
     // NOTE: this needs to be a single writer to keep track of the file index
     // pass around threads using usual Arc<Mutex<T>>
-    let mut writer = csv::WriterBuilder::new()
-        .delimiter(b';')
-        .from_path(DotfileSchema::cache_path().unwrap())
-        .map_err(|_| AppError::BadConfig)
-        .unwrap();
-    // let writer = Arc::new(Mutex::new(writer));
+    let mut writer = app_writer_non_append()?;
 
     let mut futs = JoinSet::new();
 
@@ -70,9 +69,8 @@ pub async fn try_write_cache_parallel<P: AsRef<Path>>(
 
     // TODO: clean up here ?
     while let Some(e) = futs.join_next().await {
-        let hashed_trk = e.unwrap().unwrap();
+        let str_rec = e.unwrap().unwrap();
         // TODO: perf
-        let str_rec = StringRecord::from(hashed_trk.to_vec());
         let hashed_trk: AudioTrack = AudioTrack::try_from(str_rec)?;
         sorted_tracks.push(hashed_trk);
     }
@@ -87,17 +85,14 @@ pub async fn try_write_cache_parallel<P: AsRef<Path>>(
     }
 
     // resort lib
-    sort_library(&mut sorted_tracks)?;
+    sort_library(&mut sorted_tracks);
 
     info!("update_cache complete");
     Ok(())
 }
 
 /// this function handles hash lookup return the hashed record(for csv format)
-fn track_to_hashed_rec(
-    track: AudioTrack,
-    // writer: Arc<Mutex<Writer<File>>>,
-) -> Result<[String; 8], AppError> {
+fn track_to_hashed_rec(track: AudioTrack) -> Result<StringRecord, AppError> {
     let hash = match &track.binary_hash {
         Some(hash) => Some(hash.to_string()),
         None => hash_file(&track.path, HashKind::XxHash).ok(),
@@ -105,7 +100,7 @@ fn track_to_hashed_rec(
 
     if let Some(hash) = hash {
         let record = as_record(hash, &track);
-        return Ok(record);
+        return Ok(StringRecord::from_iter(record.iter()));
     }
     Err(AppError::Unimplemented)
 }

@@ -1,13 +1,15 @@
-use self::hash::{hash_file, HashKind};
+use self::{
+    csv::{app_reader, app_writer_append, app_writer_non_append},
+    hash::{hash_file, HashKind},
+};
 use crate::{
     backend::utils::is_supported_audio,
     client::{library::LibraryClient, PlayableAudio},
-    dotfile::DotfileSchema,
     error::{AppError, LibraryError},
 };
+use ::csv::StringRecord;
 use audiotags::Tag;
 use chrono::{Datelike, NaiveDate};
-use csv::StringRecord;
 use rodio::Decoder;
 use std::{
     fmt::Display,
@@ -20,6 +22,7 @@ use tokio::{runtime::Handle, task::JoinSet};
 use walkdir::WalkDir;
 
 pub mod cache;
+mod csv;
 pub mod hash;
 
 // NOTE: keep expanding this or migrate to album(outer struct) > tracks(inner struct)
@@ -120,8 +123,9 @@ pub async fn load_all_tracks_raw<P: AsRef<Path>>(
         }
     }
     // TODO: filtering duplicate paths
+    let mut lib = tree_arc.lock()?;
+    lib.dedup();
 
-    drop(tree_arc);
     Ok(())
 }
 
@@ -161,9 +165,8 @@ pub async fn inject_metadata(
     Ok(())
 }
 
-/// [TODO:description]
+/// add hash to existing tracks inside the client
 ///
-/// * `tree_arc`: [TODO:parameter]
 /// * `handle`: handle of the hashing runtime
 /// * `also_write`: wheter if a write action should also be executed after
 /// calculating the hash
@@ -198,18 +201,38 @@ pub async fn inject_hash(
         );
     }
 
-    let mut writer = csv::WriterBuilder::new()
-        .delimiter(b';')
-        .from_path(DotfileSchema::cache_path().unwrap())
-        .map_err(|_| AppError::BadConfig)
-        .unwrap();
-
-    while let Some(Ok(t)) = join_set.join_next().await {
-        if also_write {
-            let record = StringRecord::try_from(&t?).unwrap();
-            writer.write_record(&record)?;
-            writer.flush()?;
+    if also_write {
+        {
+            let mut writer = app_writer_append()?;
+            while let Some(Ok(t)) = join_set.join_next().await {
+                if also_write {
+                    let record = StringRecord::try_from(&t?).unwrap();
+                    writer.write_record(&record)?;
+                    writer.flush()?;
+                }
+            }
         }
+        handle_collision()?;
+    }
+
+    // blocking on join_set
+    while let Some(t) = join_set.join_next().await {
+        let _ = t.unwrap();
+    }
+    Ok(())
+}
+
+/// handles collisions when there are multiple csv entries with the same hash
+fn handle_collision() -> Result<(), AppError> {
+    let mut rdr = app_reader()?;
+    let mut records: Vec<StringRecord> = rdr.records().flatten().collect();
+
+    records.sort_by(|a, b| a[7].cmp(&b[7]));
+    records.dedup_by(|a, b| a[7] == b[7]);
+
+    let mut writer = app_writer_non_append()?;
+    for rec in records {
+        writer.write_record(&rec)?;
     }
 
     Ok(())
@@ -239,7 +262,7 @@ fn read_tag(path: String) -> Result<AudioTrack, LibraryError> {
     Ok(track)
 }
 
-pub fn sort_library(tracks: &mut [AudioTrack]) -> Result<(), AppError> {
+pub fn sort_library(tracks: &mut [AudioTrack]) {
     // album_artist > year > album name > track no
     tracks.sort_unstable_by_key(|item| {
         (
@@ -252,7 +275,6 @@ pub fn sort_library(tracks: &mut [AudioTrack]) -> Result<(), AppError> {
             item.path.clone(),
         )
     });
-    Ok(())
 }
 
 pub fn create_source<P: AsRef<Path>>(path: P) -> Result<Decoder<BufReader<File>>, AppError> {

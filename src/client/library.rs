@@ -2,7 +2,7 @@ use super::{events::PlaybackEvent, ClientKind, PlayableClient};
 use crate::{
     backend::library::{
         cache::try_load_cache, create_source, inject_hash, inject_metadata, load_all_tracks_raw,
-        AudioTrack,
+        sort_library, AudioTrack,
     },
     dotfile::DotfileSchema,
     error::AppError,
@@ -58,6 +58,13 @@ impl LibraryClient {
             0.05.. => self.volume -= 0.05,
             _ => self.volume = 0.0,
         }
+    }
+
+    pub fn dedup(&mut self) {
+        let path_cmp = |a: &AudioTrack, b: &AudioTrack| a.path.cmp(&b.path);
+        self.audio_tracks.sort_by(path_cmp);
+        self.audio_tracks.dedup();
+        sort_library(&mut self.audio_tracks);
     }
 }
 
