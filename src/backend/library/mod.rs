@@ -1,7 +1,4 @@
-use self::{
-    csv::{app_reader, app_writer_append, app_writer_non_append},
-    hash::{hash_file, HashKind},
-};
+use super::utils::empty_to_option;
 use crate::{
     backend::utils::is_supported_audio,
     client::library::LibraryClient,
@@ -12,13 +9,14 @@ use audiotags::Tag;
 use chrono::{Datelike, NaiveDate};
 use rodio::Decoder;
 use std::{
-    fmt::Display,
+    fmt::{Debug, Display},
     fs::File,
     io::BufReader,
     path::Path,
     sync::{Arc, Mutex},
 };
 use tokio::{runtime::Handle, task::JoinSet};
+use tracing::instrument;
 use walkdir::WalkDir;
 
 pub mod cache;
@@ -39,6 +37,8 @@ pub struct AudioTrack {
 }
 
 impl AudioTrack {
+    const CSV_COLS: usize = 8;
+
     // TODO: perf + unicode check
     fn new<P: AsRef<Path> + ToString>(path: P) -> Self {
         let name = path
@@ -57,6 +57,43 @@ impl AudioTrack {
             date: None,
             binary_hash: None,
         }
+    }
+
+    fn to_record(&self) -> StringRecord {
+        let as_vec: &[String; Self::CSV_COLS] = &[
+            self.name.clone(),
+            self.path.clone(),
+            self.track_no.map(|no| no.to_string()).unwrap_or_default(),
+            self.artist.clone().unwrap_or_default(),
+            self.album.clone().unwrap_or_default(),
+            self.album_artist.clone().unwrap_or_default(),
+            self.date
+                .as_ref()
+                .map(|e| e.to_string())
+                .unwrap_or_default(),
+            // ----
+            // NOTE: ALWAYS PUT THIS LAST FOR `record_hash`
+            self.binary_hash.clone().unwrap_or_default(),
+        ];
+        StringRecord::from(as_vec.as_slice())
+    }
+
+    fn from_record(record: StringRecord) -> Result<Self, AppError> {
+        if record.len() != Self::CSV_COLS {
+            return Err(AppError::CsvParse);
+        }
+        let track = AudioTrack {
+            name: record[0].to_string(),
+            path: record[1].to_string(),
+            track_no: empty_to_option(&record[2]),
+            artist: empty_to_option(&record[3]),
+            album: empty_to_option(&record[4]),
+            album_artist: empty_to_option(&record[5]),
+            date: AlbumDate::parse(&record[6]),
+            binary_hash: empty_to_option(&record[7]),
+        };
+
+        Ok(track)
     }
 }
 
@@ -96,7 +133,8 @@ impl Display for AlbumDate {
 }
 
 /// only load path and name
-pub async fn load_all_tracks_raw<P: AsRef<Path>>(
+#[instrument(skip(tree_arc))]
+pub async fn load_all_tracks_raw<P: AsRef<Path> + Debug>(
     lib_root: P,
     tree_arc: Arc<Mutex<LibraryClient>>,
     hard_update: bool,
@@ -123,6 +161,7 @@ pub async fn load_all_tracks_raw<P: AsRef<Path>>(
     Ok(())
 }
 
+#[instrument(skip_all)]
 pub async fn inject_metadata(
     tree_arc: Arc<Mutex<LibraryClient>>,
     handle: Handle,
@@ -139,7 +178,6 @@ pub async fn inject_metadata(
         let _ = join_set.spawn_on(
             async move {
                 let trk = read_tag(track.path.clone()).unwrap();
-
                 {
                     let mut guard = arced.lock().unwrap();
                     let track = guard
@@ -159,80 +197,8 @@ pub async fn inject_metadata(
     Ok(())
 }
 
-/// add hash to existing tracks inside the client
-///
-/// * `handle`: handle of the hashing runtime
-/// * `also_write`: wheter if a write action should also be executed after
-/// calculating the hash
-pub async fn inject_hash(
-    lib_arc: Arc<Mutex<LibraryClient>>,
-    handle: Handle,
-    also_write: bool,
-) -> Result<(), AppError> {
-    let tracks = lib_arc.clone().lock().map(|lib| lib.audio_tracks.clone())?;
-
-    let mut join_set = JoinSet::new();
-
-    for (index, track) in tracks.into_iter().enumerate() {
-        let arced = lib_arc.clone();
-        let _ = join_set.spawn_on(
-            async move {
-                let hash = hash_file(track.path.clone(), HashKind::XxHash)?;
-
-                let track = {
-                    // hash insertion
-                    let mut guard = arced.lock().unwrap();
-                    let track = guard
-                        .audio_tracks
-                        .get_mut(index)
-                        .expect("index and size should stay unchanged");
-                    track.binary_hash = Some(hash);
-                    track.clone()
-                };
-                Ok::<AudioTrack, AppError>(track)
-            },
-            &handle,
-        );
-    }
-
-    if also_write {
-        {
-            let mut writer = app_writer_append()?;
-            while let Some(Ok(t)) = join_set.join_next().await {
-                if also_write {
-                    let record = StringRecord::try_from(&t?).unwrap();
-                    writer.write_record(&record)?;
-                    writer.flush()?;
-                }
-            }
-        }
-        handle_collision()?;
-    }
-
-    // blocking on join_set
-    while let Some(t) = join_set.join_next().await {
-        let _ = t.unwrap();
-    }
-    Ok(())
-}
-
-/// handles collisions when there are multiple csv entries with the same hash
-fn handle_collision() -> Result<(), AppError> {
-    let mut rdr = app_reader()?;
-    let mut records: Vec<StringRecord> = rdr.records().flatten().collect();
-
-    records.sort_by(|a, b| a[7].cmp(&b[7]));
-    records.dedup_by(|a, b| a[7] == b[7]);
-
-    let mut writer = app_writer_non_append()?;
-    for rec in records {
-        writer.write_record(&rec)?;
-    }
-
-    Ok(())
-}
-
 /// This function is not cheap, running in parallel is recommended
+#[instrument]
 fn read_tag(path: String) -> Result<AudioTrack, LibraryError> {
     let tag = Tag::new().read_from_path(&path)?;
     let name = tag.title().unwrap_or_default().to_string();

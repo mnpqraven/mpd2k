@@ -20,7 +20,7 @@ pub(super) enum HashKind {
 }
 
 /// hash a binary file
-#[instrument(ret)]
+#[instrument]
 pub(super) fn hash_file<T: AsRef<Path> + Debug>(
     file: T,
     kind: HashKind,
@@ -36,9 +36,7 @@ pub(super) fn hash_file<T: AsRef<Path> + Debug>(
     hash
 }
 
-/// create a SHA-2 of a file
-// 197993033
-pub fn get_hash_sha256<T: AsRef<Path> + Debug>(file: T) -> Result<String, AppError> {
+fn get_hash_sha256<T: AsRef<Path> + Debug>(file: T) -> Result<String, AppError> {
     let mut hasher = Sha256::new();
     let bytes = fs::read(file)?;
     hasher.update(bytes);
@@ -47,8 +45,7 @@ pub fn get_hash_sha256<T: AsRef<Path> + Debug>(file: T) -> Result<String, AppErr
     Ok(hash_16)
 }
 
-// 171616744
-pub fn get_hash_murmur_64<T: AsRef<Path> + Debug>(file: T) -> Result<String, AppError> {
+fn get_hash_murmur_64<T: AsRef<Path> + Debug>(file: T) -> Result<String, AppError> {
     // let mut hasher = Sha256::new();
     // let bytes = fs::read(file)?;
     let mut file = File::open(file).unwrap();
@@ -56,7 +53,7 @@ pub fn get_hash_murmur_64<T: AsRef<Path> + Debug>(file: T) -> Result<String, App
     Ok(res.to_string())
 }
 
-pub fn get_hash_xx<T: AsRef<Path> + Debug>(file: T) -> Result<String, AppError> {
+fn get_hash_xx<T: AsRef<Path> + Debug>(file: T) -> Result<String, AppError> {
     let bytes = fs::read(file)?;
     let hash = xxh3_64(&bytes);
     Ok(hash.to_string())

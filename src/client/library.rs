@@ -1,8 +1,8 @@
 use super::{events::PlaybackEvent, ClientKind, PlayableClient};
 use crate::{
     backend::library::{
-        cache::try_load_cache, create_source, inject_hash, inject_metadata, load_all_tracks_raw,
-        sort_library, AudioTrack,
+        cache::{inject_hash, try_load_cache},
+        create_source, inject_metadata, load_all_tracks_raw, sort_library, AudioTrack,
     },
     dotfile::DotfileSchema,
     error::AppError,
@@ -11,12 +11,13 @@ use ratatui::widgets::TableState;
 use rodio::Source;
 use std::{
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::{
     runtime::{Builder, Runtime},
     sync::mpsc::UnboundedSender,
 };
+use tracing::{info, instrument};
 
 #[derive(Debug)]
 pub struct LibraryClient {
@@ -43,32 +44,6 @@ impl LibraryClient {
 
 // volume methods
 impl LibraryClient {
-    pub fn set_volume(&mut self, volume: f32) -> &mut Self {
-        self.volume = volume;
-        self
-    }
-    pub fn volume_up(&mut self) {
-        match self.volume {
-            0.95.. => self.volume = 1.0,
-            _ => self.volume += 0.05,
-        }
-    }
-    pub fn volume_down(&mut self) {
-        match self.volume {
-            0.05.. => self.volume -= 0.05,
-            _ => self.volume = 0.0,
-        }
-    }
-
-    pub fn dedup(&mut self) {
-        let path_cmp = |a: &AudioTrack, b: &AudioTrack| a.path.cmp(&b.path);
-        self.audio_tracks.sort_by(path_cmp);
-        self.audio_tracks.dedup();
-        sort_library(&mut self.audio_tracks);
-    }
-}
-
-impl LibraryClient {
     pub fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
         Self {
             audio_tracks: try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default(),
@@ -89,6 +64,13 @@ impl LibraryClient {
     pub fn cleanup(self) {
         self.hashing_rt.shutdown_background();
     }
+
+    pub fn dedup(&mut self) {
+        let path_cmp = |a: &AudioTrack, b: &AudioTrack| a.path.cmp(&b.path);
+        self.audio_tracks.sort_by(path_cmp);
+        self.audio_tracks.dedup();
+        sort_library(&mut self.audio_tracks);
+    }
 }
 
 impl PlayableClient for LibraryClient {
@@ -96,11 +78,13 @@ impl PlayableClient for LibraryClient {
         Self::new(playback_tx)
     }
 
+    #[instrument(skip(self))]
     fn play(&mut self, table_state: &TableState) -> Result<(), AppError> {
         let track = table_state
             .selected()
             .and_then(|index| self.audio_tracks.get(index))
             .unwrap();
+        info!(?track);
 
         let source = create_source(track.path.clone()).unwrap();
 
@@ -132,6 +116,10 @@ impl PlayableClient for LibraryClient {
         }
     }
 
+    fn select_first_track(&self, table_state: &mut TableState) {
+        table_state.select(Some(0));
+    }
+
     fn select_last_track(&self, table_state: &mut TableState) {
         let max = self.audio_tracks.len();
         table_state.select(Some(max - 1));
@@ -154,12 +142,18 @@ impl PlayableClient for LibraryClient {
 
     fn volume_up(&mut self) {
         let _ = self.playback_tx.send(PlaybackEvent::VolumeDown);
-        self.volume_up()
+        match self.volume {
+            0.95.. => self.volume = 1.0,
+            _ => self.volume += 0.05,
+        }
     }
 
     fn volume_down(&mut self) {
         let _ = self.playback_tx.send(PlaybackEvent::VolumeUp);
-        self.volume_down()
+        match self.volume {
+            0.05.. => self.volume -= 0.05,
+            _ => self.volume = 0.0,
+        }
     }
 
     fn loading(&self) -> bool {
@@ -172,6 +166,7 @@ impl PlayableClient for LibraryClient {
 
     /// TODO: impl hash compare
     /// track list also need hash sort and dedup
+    #[instrument(skip_all)]
     fn update_lib(&mut self, self_arc: Option<Arc<Mutex<LibraryClient>>>, hard_update: bool) {
         if let Some(self_arc) = self_arc
             && !self.loading
@@ -181,6 +176,8 @@ impl PlayableClient for LibraryClient {
             let hash_handle = handle.clone();
 
             self.hashing_rt.spawn(async move {
+                let now = Instant::now();
+
                 let lib_root = DotfileSchema::parse()?.library_root()?;
                 load_all_tracks_raw(lib_root, self_arc.clone(), hard_update).await?;
                 inject_metadata(self_arc.clone(), hash_handle.clone()).await?;
@@ -189,6 +186,9 @@ impl PlayableClient for LibraryClient {
                 if let Ok(mut lib) = self_arc.lock() {
                     lib.set_loading(false);
                 }
+
+                let elapsed = now.elapsed().as_millis();
+                info!("hashing_rt total load: {elapsed} s");
                 Ok::<(), AppError>(())
             });
         }

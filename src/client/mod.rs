@@ -1,10 +1,7 @@
 use self::{events::PlaybackEvent, library::CurrentTrack};
 use crate::{backend::library::AudioTrack, error::AppError};
 use ratatui::widgets::TableState;
-use std::{
-    path::PathBuf,
-    sync::{Arc, LockResult, Mutex, MutexGuard, TryLockResult},
-};
+use std::sync::{Arc, LockResult, Mutex, MutexGuard, TryLockResult};
 use tokio::sync::mpsc::UnboundedSender;
 
 pub mod events;
@@ -28,7 +25,9 @@ pub trait PlayableClient {
 
     fn select_next_track(&self, table_state: &mut TableState);
     fn select_prev_track(&self, table_state: &mut TableState);
+    fn select_first_track(&self, table_state: &mut TableState);
     fn select_last_track(&self, table_state: &mut TableState);
+
     fn pause_unpause(&self);
     fn update_lib(&mut self, self_arc: Option<Arc<Mutex<Self>>>, hard_update: bool);
 

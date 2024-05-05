@@ -7,45 +7,26 @@ pub fn handle_key_events<Client: PlayableClient>(
     key_event: KeyEvent,
     app: &mut AppState<Client>,
 ) -> Result<(), AppError> {
-    // page-dependent
     match app.navigation.current {
-        NavigationRoute::Playback => match key_event.code {
-            KeyCode::Char('l') => {
-                if let Ok(mut tui) = app.tui_state.playback_table.lock() {
-                    app.client.get()?.select_prev_track(&mut tui)
-                }
-            }
-            KeyCode::Char('n') => {
-                if let Ok(mut tui) = app.tui_state.playback_table.lock() {
-                    app.client.get()?.select_next_track(&mut tui)
-                }
-            }
-            KeyCode::Char('I') => {
-                app.tui_state.show_left_sidebar = !app.tui_state.show_left_sidebar;
-            }
-            // NOTE: not final api, but there should be a char setter like
-            // this, and a reader somewhere in the `AppState` impl
-            KeyCode::Char('g') => {
-                app.set_multi_key(KeyCode::Char('g'));
-            }
-            KeyCode::Char('G') => {
-                if let Ok(mut tui) = app.tui_state.playback_table.lock() {
-                    app.client.get()?.select_last_track(&mut tui);
-                }
-            }
-            KeyCode::Char('p') => app.client.get()?.pause_unpause(),
-            KeyCode::Char('o') => {
-                if let Ok(tui) = app.tui_state.playback_table.lock() {
-                    app.client.get()?.play(&tui)?;
-                }
-            }
-            _ => {}
-        },
-        NavigationRoute::Config => {}
-        NavigationRoute::Help => {}
+        NavigationRoute::Playback => resolve_key_playback(app, &key_event)?,
+        NavigationRoute::Config => resolve_key_config(app, &key_event)?,
+        NavigationRoute::Help => resolve_key_help(app, &key_event)?,
     }
 
+    resolve_key_universal(app, &key_event)?;
+
+    Ok(())
+}
+
+fn resolve_key_universal<Client: PlayableClient>(
+    app: &mut AppState<Client>,
+    key_event: &KeyEvent,
+) -> Result<(), AppError> {
     // universal
+    if !app.tui_state.key_queue.is_empty() {
+        return Ok(());
+    }
+
     match key_event.code {
         KeyCode::Char('q') => app.exit(),
         KeyCode::Char('u') => {
@@ -69,8 +50,79 @@ pub fn handle_key_events<Client: PlayableClient>(
         }
         KeyCode::Char('+') => app.client.get()?.volume_up(),
         KeyCode::Char('-') => app.client.get()?.volume_down(),
-        _ => app.flush_multi_key(),
+        _ => {}
     }
 
+    Ok(())
+}
+
+fn resolve_key_playback<Client: PlayableClient>(
+    app: &mut AppState<Client>,
+    key_event: &KeyEvent,
+) -> Result<(), AppError> {
+    // multi keys get registered first
+
+    match app.tui_state.key_queue.is_empty() {
+        // NOTE: NON MULTI-KEY--------------------------------
+        true => match key_event.code {
+            KeyCode::Char('l') => {
+                if let Ok(mut tui) = app.tui_state.playback_table.lock() {
+                    app.client.get()?.select_prev_track(&mut tui)
+                }
+            }
+            KeyCode::Char('n') => {
+                if let Ok(mut tui) = app.tui_state.playback_table.lock() {
+                    app.client.get()?.select_next_track(&mut tui)
+                }
+            }
+            KeyCode::Char('I') => {
+                app.tui_state.show_left_sidebar = !app.tui_state.show_left_sidebar;
+            }
+            // NOTE: not final api, but there should be a char setter like
+            // this, and a reader somewhere in the `AppState` impl
+            KeyCode::Char('g') => app.set_multi_key(KeyCode::Char('g')),
+            KeyCode::Char('G') => {
+                if let Ok(mut tui) = app.tui_state.playback_table.lock() {
+                    app.client.get()?.select_last_track(&mut tui);
+                }
+            }
+            KeyCode::Char('p') => app.client.get()?.pause_unpause(),
+            KeyCode::Char('o') => {
+                if let Ok(tui) = app.tui_state.playback_table.lock() {
+                    app.client.get()?.play(&tui)?;
+                }
+            }
+            _ => {}
+        },
+        // NOTE MULTI-KEY--------------------------------
+        false => match key_event.code {
+            KeyCode::Char('g') => {
+                // gg
+                if app.tui_state.key_queue.first() == Some(&KeyCode::Char('g')) {
+                    app.flush_multi_key();
+
+                    let mut tui = app.tui_state.playback_table.lock()?;
+                    app.client.get()?.select_first_track(&mut tui)
+                }
+            }
+            // !gg
+            _ => app.flush_multi_key(),
+        },
+    }
+
+    Ok(())
+}
+
+fn resolve_key_config<Client: PlayableClient>(
+    _app: &mut AppState<Client>,
+    _key_event: &KeyEvent,
+) -> Result<(), AppError> {
+    Ok(())
+}
+
+fn resolve_key_help<Client: PlayableClient>(
+    _app: &mut AppState<Client>,
+    _key_event: &KeyEvent,
+) -> Result<(), AppError> {
     Ok(())
 }

@@ -27,6 +27,8 @@ pub struct TuiState {
     pub playback_table: Arc<Mutex<TableState>>,
     pub show_right_sidebar: bool,
     pub show_left_sidebar: bool,
+    // won't work with normal mutating vec
+    pub key_queue: Vec<KeyCode>,
 }
 impl Default for TuiState {
     fn default() -> Self {
@@ -34,6 +36,7 @@ impl Default for TuiState {
             playback_table: Default::default(),
             show_right_sidebar: true,
             show_left_sidebar: true,
+            key_queue: Vec::new(),
         }
     }
 }
@@ -87,16 +90,17 @@ impl<Client: PlayableClient> AppState<Client> {
 
     /// records the previous keys for multi-key command (can be either modifier
     /// + key or multi keys like `gg`)
-    pub fn set_multi_key(&mut self, _key: KeyCode) {
-        todo!()
+    pub fn set_multi_key(&mut self, key: KeyCode) {
+        self.tui_state.key_queue.push(key);
+    }
+
+    pub fn is_multi_key(&self, keys: impl AsRef<[KeyCode]> + std::fmt::Debug) -> bool {
+        self.tui_state.key_queue == keys.as_ref()
     }
 
     /// clears the multi key registry
     pub fn flush_multi_key(&mut self) {
-        // TODO: non empty bucket
-        if true {
-            // todo!()
-        }
+        self.tui_state.key_queue.clear()
     }
 
     /// Change the navigation route of the app
