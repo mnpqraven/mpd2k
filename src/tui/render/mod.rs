@@ -84,7 +84,7 @@ fn SidebarRight(clock: u128, loading: bool, area: Rect, buf: &mut Buffer) {
         false => "",
     };
     Paragraph::new(format!("{clock}\n{loading_str}"))
-        .block(Block::new().borders(Borders::all()))
+        .block(Block::new().title("Now Playing [i]").borders(Borders::all()))
         .render(area, buf)
 }
 

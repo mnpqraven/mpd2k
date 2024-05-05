@@ -7,6 +7,7 @@ use crate::{
 use ::csv::StringRecord;
 use audiotags::Tag;
 use chrono::{Datelike, NaiveDate};
+use core::cmp::Ordering;
 use rodio::Decoder;
 use std::{
     fmt::{Debug, Display},
@@ -32,7 +33,7 @@ pub struct AudioTrack {
     pub album: Option<String>,
     pub album_artist: Option<String>,
     pub track_no: Option<u16>,
-    pub date: Option<AlbumDate>,
+    pub date: SomeAlbumDate,
     pub binary_hash: Option<String>,
 }
 
@@ -54,7 +55,7 @@ impl AudioTrack {
             album: None,
             album_artist: None,
             track_no: None,
-            date: None,
+            date: SomeAlbumDate(None),
             binary_hash: None,
         }
     }
@@ -68,6 +69,7 @@ impl AudioTrack {
             self.album.clone().unwrap_or_default(),
             self.album_artist.clone().unwrap_or_default(),
             self.date
+                .0
                 .as_ref()
                 .map(|e| e.to_string())
                 .unwrap_or_default(),
@@ -89,7 +91,7 @@ impl AudioTrack {
             artist: empty_to_option(&record[3]),
             album: empty_to_option(&record[4]),
             album_artist: empty_to_option(&record[5]),
-            date: AlbumDate::parse(&record[6]),
+            date: SomeAlbumDate(AlbumDate::parse(&record[6])),
             binary_hash: empty_to_option(&record[7]),
         };
 
@@ -97,7 +99,10 @@ impl AudioTrack {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct SomeAlbumDate(pub Option<AlbumDate>);
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct AlbumDate {
     // at year is always `Some`, if we can't parse year then the whole struct is safe to be `None`
     pub year: u32,
@@ -129,6 +134,68 @@ impl Display for AlbumDate {
             s.push_str(&format!(".{day}"));
         }
         write!(f, "{}", s)
+    }
+}
+
+impl Ord for AlbumDate {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.year != other.year {
+            return self.year.cmp(&other.year);
+        }
+        if self.month != other.month {
+            return self.month.cmp(&other.month);
+        }
+        self.day.cmp(&other.day)
+    }
+}
+impl PartialOrd for AlbumDate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SomeAlbumDate {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self.0, other.0) {
+            (None, Some(_)) => Ordering::Greater,
+            (Some(_), None) => Ordering::Less,
+            (None, None) => Ordering::Equal,
+            (Some(a), Some(b)) => a.cmp(&b),
+        }
+    }
+}
+impl PartialOrd for SomeAlbumDate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for AudioTrack {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.album_artist != other.album_artist {
+            return self.album_artist.cmp(&other.album_artist);
+        }
+        if self.date != other.date {
+            return self.date.cmp(&other.date);
+        }
+        if self.album != other.album {
+            // None album goes last
+            return self.album.cmp(&other.album);
+        }
+        if self.track_no != other.track_no {
+            return self.track_no.cmp(&other.track_no);
+        }
+        if self.path != other.path {
+            return self.path.cmp(&other.path);
+        }
+        Ordering::Equal
+    }
+}
+
+impl PartialOrd for AudioTrack {
+    /// album artist > date > album name > disc no > track no > path
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -214,27 +281,12 @@ fn read_tag(path: String) -> Result<AudioTrack, LibraryError> {
         track_no,
         // _meta: entry,
         artist,
-        date,
+        date: SomeAlbumDate(date),
         album,
         album_artist,
         binary_hash: None,
     };
     Ok(track)
-}
-
-pub fn sort_library(tracks: &mut [AudioTrack]) {
-    // album_artist > year > album name > track no
-    tracks.sort_unstable_by_key(|item| {
-        (
-            item.album_artist.clone(),
-            // TODO: year here
-            item.album.clone(),
-            item.track_no,
-            item.name.clone(),
-            item.binary_hash.clone(),
-            item.path.clone(),
-        )
-    });
 }
 
 pub fn create_source<P: AsRef<Path>>(path: P) -> Result<Decoder<BufReader<File>>, AppError> {

@@ -54,7 +54,9 @@ where
 
 #[allow(non_snake_case)]
 fn MainBoxLeft(data: Option<&AudioTrack>, area: Rect, buf: &mut Buffer) {
-    let block = Block::new().borders(Borders::all());
+    let block = Block::new()
+        .title("Selected Track [I]")
+        .borders(Borders::all());
     let paragraph = match data {
         None => Paragraph::default().block(block),
         Some(data) => {
@@ -65,7 +67,7 @@ fn MainBoxLeft(data: Option<&AudioTrack>, area: Rect, buf: &mut Buffer) {
             if let Some(album_artist) = &data.album_artist {
                 text.push(Line::from(format!("Album Artist: {}", album_artist)))
             }
-            if let Some(date) = &data.date {
+            if let Some(date) = &data.date.0 {
                 text.push(Line::from(format!("Released: {}", date)))
             }
 

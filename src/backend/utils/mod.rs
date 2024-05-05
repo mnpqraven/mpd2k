@@ -1,6 +1,6 @@
 #![allow(clippy::upper_case_acronyms)]
 
-use std::{path::Path, str::FromStr};
+use std::{cmp::Ordering, path::Path, str::FromStr};
 use strum::{Display, EnumString};
 
 #[derive(Debug, EnumString, Display, PartialEq, Eq)]
@@ -35,5 +35,24 @@ pub fn empty_to_option<T: std::str::FromStr + std::default::Default>(text: &str)
     match text.is_empty() {
         true => None,
         false => Some(text.parse::<T>().unwrap_or_default()),
+    }
+}
+
+pub fn reverse_ord_option(ord: Option<Ordering>) -> Option<Ordering> {
+    if let Some(o) = ord {
+        return match o {
+            Ordering::Less => Some(Ordering::Greater),
+            Ordering::Equal => Some(Ordering::Equal),
+            Ordering::Greater => Some(Ordering::Less),
+        };
+    }
+    None
+}
+
+pub fn reverse_ord(ord: Ordering) -> Ordering {
+    match ord {
+        Ordering::Less => Ordering::Greater,
+        Ordering::Equal => Ordering::Equal,
+        Ordering::Greater => Ordering::Less,
     }
 }

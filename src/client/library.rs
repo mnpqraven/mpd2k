@@ -2,7 +2,7 @@ use super::{events::PlaybackEvent, ClientKind, PlayableClient};
 use crate::{
     backend::library::{
         cache::{inject_hash, try_load_cache},
-        create_source, inject_metadata, load_all_tracks_raw, sort_library, AudioTrack,
+        create_source, inject_metadata, load_all_tracks_raw, AudioTrack,
     },
     dotfile::DotfileSchema,
     error::AppError,
@@ -69,7 +69,7 @@ impl LibraryClient {
         let path_cmp = |a: &AudioTrack, b: &AudioTrack| a.path.cmp(&b.path);
         self.audio_tracks.sort_by(path_cmp);
         self.audio_tracks.dedup();
-        sort_library(&mut self.audio_tracks);
+        self.audio_tracks.sort();
     }
 }
 

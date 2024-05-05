@@ -4,7 +4,7 @@ use crate::error::AppError;
 use crate::{
     backend::library::{
         csv::{app_reader, app_writer_non_append},
-        sort_library, AudioTrack,
+        AudioTrack,
     },
     client::library::LibraryClient,
 };
@@ -29,7 +29,7 @@ pub fn try_load_cache<P: AsRef<Path> + Debug>(path: P) -> Result<Vec<AudioTrack>
         .records()
         .flat_map(|record| AudioTrack::from_record(record?))
         .collect::<Vec<AudioTrack>>();
-    sort_library(&mut tracks);
+    tracks.sort();
 
     info!("loaded {} items from cache", tracks.len());
     Ok(tracks)
