@@ -1,3 +1,4 @@
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::backend::library::AudioTrack;
@@ -8,6 +9,8 @@ use ratatui::{
     prelude::*,
     widgets::{TableState, *},
 };
+
+use super::image::{Image, ImageState};
 
 #[allow(non_snake_case)]
 pub fn PlaybackContainer<Client>(app: &AppState<Client>, area: Rect, buf: &mut Buffer)
@@ -40,7 +43,12 @@ where
 
         audio_tree.render(mainbox_right, buf, &mut tui_state);
 
-        MainBoxLeft(current_track, mainbox_left, buf);
+        MainBoxLeft(
+            current_track,
+            app.tui_state.image.clone(),
+            mainbox_left,
+            buf,
+        );
 
         PlaybackBottom(
             current_track,
@@ -53,7 +61,27 @@ where
 }
 
 #[allow(non_snake_case)]
-fn MainBoxLeft(data: Option<&AudioTrack>, area: Rect, buf: &mut Buffer) {
+fn MainBoxLeft(
+    data: Option<&AudioTrack>,
+    img_state: Arc<Mutex<ImageState>>,
+    area: Rect,
+    buf: &mut Buffer,
+) {
+    let image_supported = false;
+
+    let split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(image_supported as u16 * 50),
+            Constraint::Percentage(100 - image_supported as u16 * 50),
+        ])
+        .split(area);
+
+    if image_supported {
+        let mut img = img_state.lock().unwrap();
+        Image::new().render(split[0], buf, &mut img);
+    }
+
     let block = Block::new()
         .title("Selected Track [I]")
         .borders(Borders::all());
@@ -74,7 +102,7 @@ fn MainBoxLeft(data: Option<&AudioTrack>, area: Rect, buf: &mut Buffer) {
             Paragraph::new(text).block(block)
         }
     };
-    paragraph.render(area, buf)
+    paragraph.render(split[1], buf)
 }
 
 #[allow(non_snake_case)]

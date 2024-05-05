@@ -6,6 +6,7 @@ use crate::{
     },
     dotfile::DotfileSchema,
     error::AppError,
+    tui::app::TuiState,
 };
 use ratatui::widgets::TableState;
 use rodio::Source;
@@ -103,7 +104,8 @@ impl PlayableClient for LibraryClient {
         ClientKind::Library
     }
 
-    fn select_next_track(&self, table_state: &mut TableState) {
+    fn select_next_track(&self, table_state: &mut TuiState) -> Result<(), AppError> {
+        let mut table_state = table_state.playback_table.lock().unwrap();
         let max = self.audio_tracks.len();
 
         match table_state.selected() {
@@ -114,18 +116,11 @@ impl PlayableClient for LibraryClient {
             }
             None => table_state.select(Some(0)),
         }
+        Ok(())
     }
 
-    fn select_first_track(&self, table_state: &mut TableState) {
-        table_state.select(Some(0));
-    }
-
-    fn select_last_track(&self, table_state: &mut TableState) {
-        let max = self.audio_tracks.len();
-        table_state.select(Some(max - 1));
-    }
-
-    fn select_prev_track(&self, table_state: &mut TableState) {
+    fn select_prev_track(&self, tui_state: &mut TuiState) -> Result<(), AppError> {
+        let mut table_state = tui_state.playback_table.lock()?;
         match table_state.selected() {
             Some(index) => {
                 if index >= 1 {
@@ -134,6 +129,47 @@ impl PlayableClient for LibraryClient {
             }
             None => table_state.select(Some(0)),
         }
+        Ok(())
+    }
+
+    fn select_first_track(&self, tui_state: &mut TuiState) -> Result<(), AppError> {
+        let mut table_state = tui_state.playback_table.lock()?;
+        table_state.select(Some(0));
+        Ok(())
+    }
+
+    fn select_last_track(&self, tui_state: &mut TuiState) -> Result<(), AppError> {
+        let mut table_state = tui_state.playback_table.lock()?;
+        let max = self.audio_tracks.len();
+        table_state.select(Some(max - 1));
+        Ok(())
+    }
+
+    fn check_image(&self, tui_state: &mut TuiState) -> Result<(), AppError> {
+        let table_state = tui_state.playback_table.lock()?;
+        let idx = table_state.selected();
+        let img_state = tui_state.image.lock().map(|e| e.0.clone())?;
+        match (idx, &img_state) {
+            (Some(index), _) => {
+                // safe unwrap
+                let track = self.audio_tracks.get(index).unwrap();
+                if track.album != tui_state.last_album {
+                    if let (Ok(mut image), Some(p)) =
+                        (tui_state.image.lock(), track.try_cover_path())
+                    {
+                        image.update(p);
+                    }
+                }
+                tui_state.last_album.clone_from(&track.album);
+            }
+            (None, Some(_)) => {
+                if let Ok(mut image) = tui_state.image.lock() {
+                    image.unset();
+                }
+            }
+            (None, None) => {}
+        }
+        Ok(())
     }
 
     fn pause_unpause(&self) {

@@ -65,15 +65,11 @@ fn resolve_key_playback<Client: PlayableClient>(
     match app.tui_state.key_queue.is_empty() {
         // NOTE: NON MULTI-KEY--------------------------------
         true => match key_event.code {
-            KeyCode::Char('l') => {
-                if let Ok(mut tui) = app.tui_state.playback_table.lock() {
-                    app.client.get()?.select_prev_track(&mut tui)
-                }
-            }
+            KeyCode::Char('l') => app.client.get()?.select_prev_track(&mut app.tui_state)?,
             KeyCode::Char('n') => {
-                if let Ok(mut tui) = app.tui_state.playback_table.lock() {
-                    app.client.get()?.select_next_track(&mut tui)
-                }
+                app.client.get()?.select_next_track(&mut app.tui_state)?;
+                // NOTE: update logic for image redraw
+                // app.client.get()?.check_image(&mut app.tui_state)?;
             }
             KeyCode::Char('I') => {
                 app.tui_state.show_left_sidebar = !app.tui_state.show_left_sidebar;
@@ -81,11 +77,7 @@ fn resolve_key_playback<Client: PlayableClient>(
             // NOTE: not final api, but there should be a char setter like
             // this, and a reader somewhere in the `AppState` impl
             KeyCode::Char('g') => app.set_multi_key(KeyCode::Char('g')),
-            KeyCode::Char('G') => {
-                if let Ok(mut tui) = app.tui_state.playback_table.lock() {
-                    app.client.get()?.select_last_track(&mut tui);
-                }
-            }
+            KeyCode::Char('G') => app.client.get()?.select_last_track(&mut app.tui_state)?,
             KeyCode::Char('p') => app.client.get()?.pause_unpause(),
             KeyCode::Char('o') => {
                 if let Ok(tui) = app.tui_state.playback_table.lock() {
@@ -100,9 +92,7 @@ fn resolve_key_playback<Client: PlayableClient>(
                 // gg
                 if app.tui_state.key_queue.first() == Some(&KeyCode::Char('g')) {
                     app.flush_multi_key();
-
-                    let mut tui = app.tui_state.playback_table.lock()?;
-                    app.client.get()?.select_first_track(&mut tui)
+                    app.client.get()?.select_first_track(&mut app.tui_state)?;
                 }
             }
             // !gg

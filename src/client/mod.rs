@@ -1,5 +1,5 @@
 use self::{events::PlaybackEvent, library::CurrentTrack};
-use crate::{backend::library::AudioTrack, error::AppError};
+use crate::{backend::library::AudioTrack, error::AppError, tui::app::TuiState};
 use ratatui::widgets::TableState;
 use std::sync::{Arc, LockResult, Mutex, MutexGuard, TryLockResult};
 use tokio::sync::mpsc::UnboundedSender;
@@ -23,10 +23,13 @@ pub trait PlayableClient {
 
     fn audio_tracks(&self) -> &[AudioTrack];
 
-    fn select_next_track(&self, table_state: &mut TableState);
-    fn select_prev_track(&self, table_state: &mut TableState);
-    fn select_first_track(&self, table_state: &mut TableState);
-    fn select_last_track(&self, table_state: &mut TableState);
+    fn select_next_track(&self, table_state: &mut TuiState) -> Result<(), AppError>;
+    fn select_prev_track(&self, table_state: &mut TuiState) -> Result<(), AppError>;
+    fn select_first_track(&self, table_state: &mut TuiState) -> Result<(), AppError>;
+    fn select_last_track(&self, table_state: &mut TuiState) -> Result<(), AppError>;
+
+    /// updates the last_album + image if necessary
+    fn check_image(&self, tui_state: &mut TuiState) -> Result<(), AppError>;
 
     fn pause_unpause(&self);
     fn update_lib(&mut self, self_arc: Option<Arc<Mutex<Self>>>, hard_update: bool);

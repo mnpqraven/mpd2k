@@ -11,9 +11,9 @@ use core::cmp::Ordering;
 use rodio::Decoder;
 use std::{
     fmt::{Debug, Display},
-    fs::File,
+    fs::{read_dir, File},
     io::BufReader,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 use tokio::{runtime::Handle, task::JoinSet};
@@ -96,6 +96,25 @@ impl AudioTrack {
         };
 
         Ok(track)
+    }
+
+    pub fn try_cover_path(&self) -> Option<PathBuf> {
+        let track_path = PathBuf::from(self.path.clone());
+        let dir = track_path.parent();
+        if let Some(dir) = dir {
+            let img_paths: Vec<PathBuf> = read_dir(dir)
+                .unwrap()
+                .filter(|e| {
+                    let path = e.as_ref().unwrap().path();
+                    ["png", "jpg"]
+                        .into_iter()
+                        .any(|ext| ext == path.extension().unwrap())
+                })
+                .map(|e| e.unwrap().path())
+                .collect();
+            return img_paths.first().cloned();
+        }
+        None
     }
 }
 

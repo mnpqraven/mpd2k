@@ -1,5 +1,6 @@
 mod config;
 mod help;
+pub mod image;
 mod playback;
 
 use self::{config::ConfigContainer, help::HelpContainer, playback::PlaybackContainer};
@@ -84,7 +85,11 @@ fn SidebarRight(clock: u128, loading: bool, area: Rect, buf: &mut Buffer) {
         false => "",
     };
     Paragraph::new(format!("{clock}\n{loading_str}"))
-        .block(Block::new().title("Now Playing [i]").borders(Borders::all()))
+        .block(
+            Block::new()
+                .title("Now Playing [i]")
+                .borders(Borders::all()),
+        )
         .render(area, buf)
 }
 

@@ -1,3 +1,4 @@
+use super::render::image::ImageState;
 use crate::client::PlayableClient;
 use crate::client::{events::PlaybackEvent, PlaybackClient};
 use crossterm::{
@@ -27,6 +28,8 @@ pub struct TuiState {
     pub playback_table: Arc<Mutex<TableState>>,
     pub show_right_sidebar: bool,
     pub show_left_sidebar: bool,
+    pub image: Arc<Mutex<ImageState>>,
+    pub last_album: Option<String>,
     // won't work with normal mutating vec
     pub key_queue: Vec<KeyCode>,
 }
@@ -36,6 +39,8 @@ impl Default for TuiState {
             playback_table: Default::default(),
             show_right_sidebar: true,
             show_left_sidebar: true,
+            image: Default::default(),
+            last_album: None,
             key_queue: Vec::new(),
         }
     }
