@@ -137,7 +137,7 @@ checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
 [[package]]
 name = "audiotags"
 version = "0.5.0"
-source = "git+https://github.com/mnpqraven/audiotags#8b295c5570744097115877ea34142051e15fa24a"
+source = "git+https://github.com/mnpqraven/audiotags#c6e41fb2071434216dd627322790a18e5410a081"
 dependencies = [
  "audiotags-macro",
  "id3",
@@ -150,7 +150,7 @@ dependencies = [
 [[package]]
 name = "audiotags-macro"
 version = "0.2.0"
-source = "git+https://github.com/mnpqraven/audiotags#8b295c5570744097115877ea34142051e15fa24a"
+source = "git+https://github.com/mnpqraven/audiotags#c6e41fb2071434216dd627322790a18e5410a081"
 
 [[package]]
 name = "autocfg"

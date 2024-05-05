@@ -5,7 +5,7 @@ use crate::{
     error::{AppError, LibraryError},
 };
 use ::csv::StringRecord;
-use audiotags::Tag;
+use audiotags::{Tag, TimestampTag};
 use chrono::{Datelike, NaiveDate};
 use core::cmp::Ordering;
 use rodio::Decoder;
@@ -91,7 +91,9 @@ impl AudioTrack {
             artist: empty_to_option(&record[3]),
             album: empty_to_option(&record[4]),
             album_artist: empty_to_option(&record[5]),
-            date: SomeAlbumDate(AlbumDate::parse(&record[6])),
+            date: SomeAlbumDate(AlbumDate::parse(TimestampTag::Unknown(
+                record[6].to_string(),
+            ))),
             binary_hash: empty_to_option(&record[7]),
         };
 
@@ -130,15 +132,21 @@ pub struct AlbumDate {
 }
 
 impl AlbumDate {
-    fn parse(text: &str) -> Option<Self> {
-        // TODO: more formats
-        match NaiveDate::parse_from_str(text, "%Y.%m.%d") {
-            Ok(s) => Some(Self {
-                year: s.year() as u32,
-                month: Some((s.month0() + 1) as u8),
-                day: Some((s.day0() + 1) as u8),
-            }),
-            Err(_) => None,
+    fn parse(text: TimestampTag) -> Option<Self> {
+        match text {
+            TimestampTag::Id3(_) => todo!(),
+            TimestampTag::Unknown(text) =>
+            // TODO: more formats
+            {
+                match NaiveDate::parse_from_str(&text, "%Y.%m.%d") {
+                    Ok(s) => Some(Self {
+                        year: s.year() as u32,
+                        month: Some((s.month0() + 1) as u8),
+                        day: Some((s.day0() + 1) as u8),
+                    }),
+                    Err(_) => None,
+                }
+            }
         }
     }
 }
