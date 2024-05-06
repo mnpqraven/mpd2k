@@ -1,7 +1,8 @@
 use self::{events::PlaybackEvent, library::CurrentTrack};
-use crate::backend::library::types::AudioTrack;
+use crate::backend::library::types::{AlbumMeta, AudioTrack};
 use crate::{error::AppError, tui::app::TuiState};
 use ratatui::widgets::TableState;
+use std::collections::BTreeMap;
 use std::sync::{Arc, LockResult, Mutex, MutexGuard, TryLockResult};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -23,6 +24,7 @@ pub trait PlayableClient {
     fn loading(&self) -> bool;
 
     fn audio_tracks(&self) -> &[AudioTrack];
+    fn albums(&self) -> &BTreeMap<AlbumMeta, Vec<AudioTrack>>;
 
     fn select_next_track(&self, table_state: &mut TuiState) -> Result<(), AppError>;
     fn select_prev_track(&self, table_state: &mut TuiState) -> Result<(), AppError>;

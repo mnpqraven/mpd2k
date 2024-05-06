@@ -9,8 +9,9 @@ pub fn handle_key_events<Client: PlayableClient>(
 ) -> Result<(), AppError> {
     match app.navigation.current {
         NavigationRoute::Playback => resolve_key_playback(app, &key_event)?,
-        NavigationRoute::Config => resolve_key_config(app, &key_event)?,
+        NavigationRoute::LibraryTree => resolve_key_library_tree(app, &key_event)?,
         NavigationRoute::Help => resolve_key_help(app, &key_event)?,
+        NavigationRoute::Config => resolve_key_config(app, &key_event)?,
     }
 
     resolve_key_universal(app, &key_event)?;
@@ -43,8 +44,9 @@ fn resolve_key_universal<Client: PlayableClient>(
         }
 
         KeyCode::Char('1') => app.navigate(NavigationRoute::Playback),
-        KeyCode::Char('2') => app.navigate(NavigationRoute::Config),
-        KeyCode::Char('3') => app.navigate(NavigationRoute::Help),
+        KeyCode::Char('2') => app.navigate(NavigationRoute::LibraryTree),
+        KeyCode::Char('3') => app.navigate(NavigationRoute::Config),
+        KeyCode::Char('4') => app.navigate(NavigationRoute::Help),
         KeyCode::Char('i') => {
             app.tui_state.show_right_sidebar = !app.tui_state.show_right_sidebar;
         }
@@ -66,11 +68,7 @@ fn resolve_key_playback<Client: PlayableClient>(
         // NOTE: NON MULTI-KEY--------------------------------
         true => match key_event.code {
             KeyCode::Char('l') => app.client.get()?.select_prev_track(&mut app.tui_state)?,
-            KeyCode::Char('n') => {
-                app.client.get()?.select_next_track(&mut app.tui_state)?;
-                // NOTE: update logic for image redraw
-                // app.client.get()?.check_image(&mut app.tui_state)?;
-            }
+            KeyCode::Char('n') => app.client.get()?.select_next_track(&mut app.tui_state)?,
             KeyCode::Char('I') => {
                 app.tui_state.show_left_sidebar = !app.tui_state.show_left_sidebar;
             }
@@ -111,6 +109,13 @@ fn resolve_key_config<Client: PlayableClient>(
 }
 
 fn resolve_key_help<Client: PlayableClient>(
+    _app: &mut AppState<Client>,
+    _key_event: &KeyEvent,
+) -> Result<(), AppError> {
+    Ok(())
+}
+
+fn resolve_key_library_tree<Client: PlayableClient>(
     _app: &mut AppState<Client>,
     _key_event: &KeyEvent,
 ) -> Result<(), AppError> {

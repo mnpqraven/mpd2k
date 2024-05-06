@@ -2,14 +2,15 @@ mod config;
 mod help;
 pub mod image;
 mod playback;
+pub mod tree;
 
-use self::{config::ConfigContainer, help::HelpContainer, playback::PlaybackContainer};
-use super::app::{AppState, NavigationRoute, NavigationState};
-use crate::client::{library::LibraryClient, PlayableClient};
-use ratatui::{
-    prelude::*,
-    widgets::{TableState, *},
+use self::{
+    config::ConfigContainer, help::HelpContainer, playback::PlaybackContainer,
+    tree::LibraryTreeContainer,
 };
+use super::app::{AppState, NavigationRoute, NavigationState};
+use crate::client::PlayableClient;
+use ratatui::{prelude::*, widgets::*};
 use std::time::{SystemTime, UNIX_EPOCH};
 use strum::IntoEnumIterator;
 
@@ -17,7 +18,6 @@ use strum::IntoEnumIterator;
 impl<Client> Widget for &AppState<Client>
 where
     Client: PlayableClient,
-    for<'a> &'a Client: StatefulWidget<State = TableState>,
 {
     /// TODO:
     /// ```
@@ -44,7 +44,7 @@ where
             ])
             .split(area);
 
-        let split_navbar_mainbox = Layout::default()
+        let split_ud = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
                 // top navigation bar
@@ -62,13 +62,14 @@ where
         let is_loading = self.client.get().unwrap().loading();
 
         // NAVBAR
-        self.navigation.render(split_navbar_mainbox[0], buf);
+        self.navigation.render(split_ud[0], buf);
 
         // MAIN BOX
         match self.navigation.current {
-            NavigationRoute::Playback => PlaybackContainer(self, split_navbar_mainbox[1], buf),
-            NavigationRoute::Config => ConfigContainer(self, split_navbar_mainbox[1], buf),
-            NavigationRoute::Help => HelpContainer(self, split_navbar_mainbox[1], buf),
+            NavigationRoute::Playback => PlaybackContainer(self, split_ud[1], buf),
+            NavigationRoute::LibraryTree => LibraryTreeContainer(self, split_ud[1], buf),
+            NavigationRoute::Config => ConfigContainer(self, split_ud[1], buf),
+            NavigationRoute::Help => HelpContainer(self, split_ud[1], buf),
         };
 
         // RIGHT SIDEBAR
@@ -91,46 +92,6 @@ fn SidebarRight(clock: u128, loading: bool, area: Rect, buf: &mut Buffer) {
                 .borders(Borders::all()),
         )
         .render(area, buf)
-}
-
-// TODO: file refactor
-// TODO: render for mpd client too
-impl StatefulWidget for &LibraryClient {
-    type State = TableState;
-
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let rows = self
-            .audio_tracks()
-            .iter()
-            .map(|data| {
-                Row::new([
-                    Cell::from(data.name.clone()),
-                    Cell::from(data.artist.to_owned().unwrap_or_default()),
-                    Cell::from(data.track_no.unwrap_or_default().to_string()),
-                ])
-            })
-            .collect::<Vec<Row>>();
-
-        let widths = [
-            Constraint::Ratio(2, 3),
-            Constraint::Ratio(1, 3),
-            Constraint::Min(3),
-        ];
-
-        ratatui::widgets::StatefulWidget::render(
-            Table::new(rows, widths)
-                .header(
-                    Row::new([Cell::from("Title"), Cell::from("Artist"), Cell::from("#")])
-                        .bottom_margin(1),
-                )
-                .column_spacing(1)
-                .block(Block::new().borders(Borders::all()))
-                .highlight_style(Style::new().black().on_white()),
-            area,
-            buf,
-            state,
-        )
-    }
 }
 
 impl Widget for &NavigationState {

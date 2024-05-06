@@ -1,4 +1,3 @@
-use super::image::{Image, ImageState};
 use crate::backend::library::types::AudioTrack;
 use crate::client::PlayableClient;
 use crate::tui::app::AppState;
@@ -7,14 +6,12 @@ use ratatui::{
     prelude::*,
     widgets::{TableState, *},
 };
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 #[allow(non_snake_case)]
 pub fn PlaybackContainer<Client>(app: &AppState<Client>, area: Rect, buf: &mut Buffer)
 where
     Client: PlayableClient,
-    for<'a> &'a Client: StatefulWidget<State = TableState>,
 {
     let rect_dir_seeker = Layout::default()
         .direction(Direction::Vertical)
@@ -32,26 +29,21 @@ where
     let mainbox_left = mainbox_layout[0];
     let mainbox_right = mainbox_layout[1];
 
-    if let Ok(audio_tree) = app.client.try_get()
+    if let Ok(client) = app.client.try_get()
         && let Ok(mut tui_state) = app.tui_state.playback_table.try_lock()
     {
         let current_track = tui_state
             .selected()
-            .and_then(|f| audio_tree.audio_tracks().get(f));
+            .and_then(|f| client.audio_tracks().get(f));
 
-        audio_tree.render(mainbox_right, buf, &mut tui_state);
+        MainBoxLeft(&*client, mainbox_left, buf, &mut tui_state);
 
-        MainBoxLeft(
-            current_track,
-            app.tui_state.image.clone(),
-            mainbox_left,
-            buf,
-        );
+        MainboxRight(&*client, mainbox_right, buf, &mut tui_state);
 
         PlaybackBottom(
             current_track,
-            audio_tree.current_track().map(|e| e.duration),
-            audio_tree.volume_percentage(),
+            client.current_track().map(|e| e.duration),
+            client.volume_percentage(),
             rect_dir_seeker[1],
             buf,
         );
@@ -59,31 +51,18 @@ where
 }
 
 #[allow(non_snake_case)]
-fn MainBoxLeft(
-    data: Option<&AudioTrack>,
-    img_state: Arc<Mutex<ImageState>>,
+fn MainBoxLeft<Client: PlayableClient>(
+    data: &Client,
     area: Rect,
     buf: &mut Buffer,
+    state: &mut TableState,
 ) {
-    let image_supported = false;
-
-    let split = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage(image_supported as u16 * 50),
-            Constraint::Percentage(100 - image_supported as u16 * 50),
-        ])
-        .split(area);
-
-    if image_supported {
-        let mut img = img_state.lock().unwrap();
-        Image::new().render(split[0], buf, &mut img);
-    }
-
+    let current_track = state.selected().and_then(|f| data.audio_tracks().get(f));
     let block = Block::new()
         .title("Selected Track [I]")
         .borders(Borders::all());
-    let paragraph = match data {
+
+    let paragraph = match current_track {
         None => Paragraph::default().block(block),
         Some(data) => {
             let mut text = Vec::new();
@@ -97,14 +76,54 @@ fn MainBoxLeft(
                 text.push(Line::from(format!("Released: {}", date)))
             }
 
-            Paragraph::new(text).block(block)
+            Paragraph::new(text).wrap(Wrap { trim: true }).block(block)
         }
     };
-    paragraph.render(split[1], buf)
+    paragraph.render(area, buf)
 }
 
 #[allow(non_snake_case)]
-fn PlaybackBottom(
+fn MainboxRight<Client: PlayableClient>(
+    data: &Client,
+    area: Rect,
+    buf: &mut Buffer,
+    state: &mut TableState,
+) {
+    let rows = data
+        .audio_tracks()
+        .iter()
+        .map(|data| {
+            Row::new([
+                Cell::from(data.name.clone()),
+                Cell::from(data.artist.to_owned().unwrap_or_default()),
+                Cell::from(data.track_no.unwrap_or_default().to_string()),
+            ])
+        })
+        .collect::<Vec<Row>>();
+
+    let widths = [
+        Constraint::Ratio(2, 3),
+        Constraint::Ratio(1, 3),
+        Constraint::Min(3),
+    ];
+
+    ratatui::widgets::StatefulWidget::render(
+        Table::new(rows, widths)
+            .header(
+                Row::new([Cell::from("Title"), Cell::from("Artist"), Cell::from("#")])
+                    .bottom_margin(1),
+            )
+            .column_spacing(1)
+            .block(Block::new().borders(Borders::all()))
+            .highlight_style(Style::new().black().on_white()),
+        area,
+        buf,
+        state,
+    )
+}
+
+#[allow(non_snake_case)]
+pub fn PlaybackBottom(
     data: Option<&AudioTrack>,
     dur: Option<Duration>,
     volume_percentage: u8,

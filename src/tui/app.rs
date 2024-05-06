@@ -26,6 +26,7 @@ pub struct AppState<Client: PlayableClient> {
 #[derive(Debug)]
 pub struct TuiState {
     pub playback_table: Arc<Mutex<TableState>>,
+    pub library_table: Arc<Mutex<TableState>>,
     pub show_right_sidebar: bool,
     pub show_left_sidebar: bool,
     pub image: Arc<Mutex<ImageState>>,
@@ -37,6 +38,7 @@ impl Default for TuiState {
     fn default() -> Self {
         Self {
             playback_table: Default::default(),
+            library_table: Default::default(),
             show_right_sidebar: true,
             show_left_sidebar: true,
             image: Default::default(),
@@ -55,6 +57,7 @@ pub struct NavigationState {
 pub enum NavigationRoute {
     #[default]
     Playback,
+    LibraryTree,
     Config,
     Help,
 }

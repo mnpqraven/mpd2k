@@ -204,6 +204,10 @@ impl PlayableClient for LibraryClient {
         &self.audio_tracks
     }
 
+    fn albums(&self) -> &BTreeMap<AlbumMeta, Vec<AudioTrack>> {
+        &self.albums
+    }
+
     /// TODO: impl hash compare
     /// track list also need hash sort and dedup
     #[instrument(skip_all)]
