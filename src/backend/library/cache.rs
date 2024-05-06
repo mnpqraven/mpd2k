@@ -1,12 +1,11 @@
-use super::csv::app_writer_append;
-use super::hash::{hash_file, HashKind};
-use crate::error::AppError;
+use super::{csv::app_writer_append, hash::hash_file, HashKind};
 use crate::{
     backend::library::{
         csv::{app_reader, app_writer_non_append},
         AudioTrack,
     },
     client::library::LibraryClient,
+    error::AppError,
 };
 use csv::StringRecord;
 use std::{

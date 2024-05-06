@@ -1,5 +1,6 @@
 use self::{events::PlaybackEvent, library::CurrentTrack};
-use crate::{backend::library::AudioTrack, error::AppError, tui::app::TuiState};
+use crate::backend::library::types::AudioTrack;
+use crate::{error::AppError, tui::app::TuiState};
 use ratatui::widgets::TableState;
 use std::sync::{Arc, LockResult, Mutex, MutexGuard, TryLockResult};
 use tokio::sync::mpsc::UnboundedSender;

@@ -1,3 +1,4 @@
+use super::HashKind;
 use crate::error::AppError;
 use murmur3::murmur3_x64_128;
 use sha2::{Digest, Sha256};
@@ -7,17 +8,8 @@ use std::{
     path::Path,
     time::Instant,
 };
-use strum::Display;
 use tracing::{info, instrument};
 use xxhash_rust::xxh3::xxh3_64;
-
-#[allow(dead_code)]
-#[derive(Debug, Display)]
-pub(super) enum HashKind {
-    Sha256,
-    Murmur,
-    XxHash,
-}
 
 /// hash a binary file
 #[instrument]

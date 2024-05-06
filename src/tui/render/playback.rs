@@ -1,7 +1,5 @@
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-
-use crate::backend::library::AudioTrack;
+use super::image::{Image, ImageState};
+use crate::backend::library::types::AudioTrack;
 use crate::client::PlayableClient;
 use crate::tui::app::AppState;
 use ratatui::{buffer::Buffer, layout::Rect};
@@ -9,8 +7,8 @@ use ratatui::{
     prelude::*,
     widgets::{TableState, *},
 };
-
-use super::image::{Image, ImageState};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 #[allow(non_snake_case)]
 pub fn PlaybackContainer<Client>(app: &AppState<Client>, area: Rect, buf: &mut Buffer)

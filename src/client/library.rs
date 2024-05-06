@@ -2,7 +2,8 @@ use super::{events::PlaybackEvent, ClientKind, PlayableClient};
 use crate::{
     backend::library::{
         cache::{inject_hash, try_load_cache},
-        create_source, inject_metadata, load_albums, load_all_tracks_raw, AlbumMeta, AudioTrack,
+        create_source, inject_metadata, load_albums, load_all_tracks_raw,
+        types::{AlbumMeta, AudioTrack},
     },
     dotfile::DotfileSchema,
     error::AppError,
