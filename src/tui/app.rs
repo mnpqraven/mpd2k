@@ -31,7 +31,6 @@ pub struct TuiState {
     pub show_left_sidebar: bool,
     pub image: Arc<Mutex<ImageState>>,
     pub last_album: Option<String>,
-    // won't work with normal mutating vec
     pub key_queue: Vec<KeyCode>,
 }
 impl Default for TuiState {

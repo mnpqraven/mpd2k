@@ -1,4 +1,5 @@
 use crate::backend::library::types::AudioTrack;
+use crate::client::library::CurrentTrack;
 use crate::client::PlayableClient;
 use crate::tui::app::AppState;
 use ratatui::{buffer::Buffer, layout::Rect};
@@ -32,21 +33,11 @@ where
     if let Ok(client) = app.client.try_get()
         && let Ok(mut tui_state) = app.tui_state.playback_table.try_lock()
     {
-        let current_track = tui_state
-            .selected()
-            .and_then(|f| client.audio_tracks().get(f));
-
         MainBoxLeft(&*client, mainbox_left, buf, &mut tui_state);
 
         MainboxRight(&*client, mainbox_right, buf, &mut tui_state);
 
-        PlaybackBottom(
-            current_track,
-            client.current_track().map(|e| e.duration),
-            client.volume_percentage(),
-            rect_dir_seeker[1],
-            buf,
-        );
+        PlaybackBottom(&*client, rect_dir_seeker[1], buf);
     };
 }
 
@@ -123,13 +114,9 @@ fn MainboxRight<Client: PlayableClient>(
 }
 
 #[allow(non_snake_case)]
-pub fn PlaybackBottom(
-    data: Option<&AudioTrack>,
-    dur: Option<Duration>,
-    volume_percentage: u8,
-    area: Rect,
-    buf: &mut Buffer,
-) {
+pub fn PlaybackBottom<Client: PlayableClient>(client: &Client, area: Rect, buf: &mut Buffer) {
+    let current_track = client.current_track();
+
     let block = Block::new().borders(Borders::all());
     let layout = Layout::new(
         Direction::Horizontal,
@@ -148,7 +135,7 @@ pub fn PlaybackBottom(
     let symbol_empty = Span::raw("-");
     let playback_line_width = layout[0].width;
     // TODO: math out rendering logic for elapsed duration
-    let playback_line = match data {
+    let playback_line = match current_track {
         Some(_) => {
             Vec::from_iter(std::iter::repeat(symbol_empty).take(playback_line_width as usize))
         }
@@ -157,8 +144,10 @@ pub fn PlaybackBottom(
 
     let line = Line::from(playback_line);
 
-    let duration = Line::from(format!("0:00 / {}", timestamp(&dur))).alignment(Alignment::Right);
-    let volume = Line::from(format!("{} %", volume_percentage)).alignment(Alignment::Right);
+    let duration = timestamp(&current_track.map(|e| e.duration));
+    let duration = Line::from(format!("0:00 / {}", duration)).alignment(Alignment::Right);
+    let volume = client.volume_percentage();
+    let volume = Line::from(format!("{} %", volume)).alignment(Alignment::Right);
     let status = Line::from(vec![" Rep ".into(), " Loop ".into(), " Upd ".into()])
         .alignment(Alignment::Right);
     Paragraph::new(line).render(layout[0], buf);

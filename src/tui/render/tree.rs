@@ -1,7 +1,8 @@
+use super::playback::PlaybackBottom;
 use crate::client::PlayableClient;
 use crate::tui::app::AppState;
 use ratatui::prelude::*;
-use ratatui::widgets::{TableState, *};
+use ratatui::widgets::*;
 use ratatui::{buffer::Buffer, layout::Rect};
 
 #[allow(non_snake_case)]
@@ -44,12 +45,6 @@ where
             &mut state,
         );
 
-        // PlaybackBottom(
-        //     current_track,
-        //     client.current_track().map(|e| e.duration),
-        //     client.volume_percentage(),
-        //     rect_dir_seeker[1],
-        //     buf,
-        // );
+        PlaybackBottom(&*client, rect_dir_seeker[1], buf);
     }
 }
