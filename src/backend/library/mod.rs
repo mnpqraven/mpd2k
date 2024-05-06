@@ -1,7 +1,6 @@
 use self::types::*;
 use crate::{
     backend::utils::is_supported_audio,
-    client::library::LibraryClient,
     error::{AppError, LibraryError},
 };
 use audiotags::Tag;
@@ -11,7 +10,6 @@ use std::{
     fmt::Debug,
     fs::File,
     io::BufReader,
-    ops::Deref,
     path::Path,
     sync::{Arc, Mutex},
 };
@@ -21,7 +19,8 @@ use walkdir::WalkDir;
 
 pub mod cache;
 mod csv;
-pub mod hash;
+mod hash;
+mod traits;
 pub mod types;
 
 /// only load path and name
@@ -84,7 +83,7 @@ pub fn load_albums(tree_arc: Arc<Mutex<LibraryClient>>) -> Result<(), AppError> 
                 AlbumMeta {
                     album_artist,
                     date,
-                    name: Some(album.to_string()),
+                    name: Some(album.clone()),
                 },
                 tracks,
             );
@@ -135,10 +134,10 @@ pub async fn inject_metadata(
 fn read_tag<P: AsRef<Path> + Debug + Into<Arc<str>>>(path: P) -> Result<AudioTrack, LibraryError> {
     let tag = Tag::new().read_from_path(&path)?;
     let name = tag.title().unwrap_or_default().to_string();
-    let album = tag.album_title().map(|e| e.to_owned());
+    let album: Option<Arc<str>> = tag.album_title().map(Into::into);
     let artist = tag.artist().map(Into::into);
     let date = tag.date_raw().and_then(AlbumDate::parse);
-    let album_artist = tag.album_artist().map(|e| e.to_owned());
+    let album_artist: Option<Arc<str>> = tag.album_artist().map(Into::into);
     let track_no = tag.track_number();
 
     let track = AudioTrack {

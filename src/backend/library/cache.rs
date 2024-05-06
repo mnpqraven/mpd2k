@@ -1,10 +1,9 @@
-use super::{csv::app_writer_append, hash::hash_file, AlbumMeta, HashKind};
+use super::{csv::app_writer_append, hash::hash_file, AlbumMeta, HashKind, LibraryClient};
 use crate::{
     backend::library::{
         csv::{app_reader, app_writer_non_append},
         AudioTrack,
     },
-    client::library::LibraryClient,
     error::AppError,
 };
 use csv::StringRecord;
@@ -40,15 +39,11 @@ pub fn try_load_cache_albums(tracks: Vec<AudioTrack>) -> BTreeMap<AlbumMeta, Vec
     let mut tree: BTreeMap<AlbumMeta, Vec<AudioTrack>> = BTreeMap::new();
     for track in tracks {
         let track_cloned = track.clone();
-        let key: AlbumMeta = AlbumMeta {
-            album_artist: track.album_artist,
-            date: track.date,
-            name: track.album,
-        };
-        match tree.get_mut(&key) {
+        let album_meta: AlbumMeta = track.into();
+        match tree.get_mut(&album_meta) {
             Some(existing_tracks) => existing_tracks.push(track_cloned),
             None => {
-                tree.insert(key, vec![track_cloned]);
+                tree.insert(album_meta, vec![track_cloned]);
             }
         }
     }
@@ -105,7 +100,7 @@ pub async fn inject_hash(
                         .audio_tracks
                         .get_mut(index)
                         .expect("index and size should stay unchanged");
-                    track.binary_hash = Some(hash);
+                    track.binary_hash = Some(hash.into());
                     track.clone()
                 };
                 Ok::<AudioTrack, AppError>(track)

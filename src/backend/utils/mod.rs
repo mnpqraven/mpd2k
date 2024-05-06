@@ -1,6 +1,6 @@
 #![allow(clippy::upper_case_acronyms)]
 
-use std::{cmp::Ordering, path::Path, str::FromStr};
+use std::{cmp::Ordering, default::Default, path::Path, str::FromStr};
 use strum::{Display, EnumString};
 
 #[derive(Debug, EnumString, Display, PartialEq, Eq)]
@@ -31,7 +31,10 @@ pub fn is_supported_audio<T: AsRef<Path>>(path: T) -> bool {
 }
 
 /// this function converts empty string to None
-pub fn empty_to_option<T: std::str::FromStr + std::default::Default>(text: &str) -> Option<T> {
+pub fn empty_to_option<T>(text: &str) -> Option<T>
+where
+    T: FromStr + Default,
+{
     match text.is_empty() {
         true => None,
         false => Some(text.parse::<T>().unwrap_or_default()),

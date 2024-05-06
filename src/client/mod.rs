@@ -1,5 +1,5 @@
-use self::{events::PlaybackEvent, library::CurrentTrack};
-use crate::backend::library::types::{AlbumMeta, AudioTrack};
+use self::events::PlaybackEvent;
+use crate::backend::library::types::{AlbumMeta, AudioTrack, CurrentTrack};
 use crate::{error::AppError, tui::app::TuiState};
 use ratatui::widgets::TableState;
 use std::collections::BTreeMap;

@@ -1,9 +1,9 @@
 use super::{events::PlaybackEvent, ClientKind, PlayableClient};
 use crate::{
     backend::library::{
-        cache::{inject_hash, try_load_cache, try_load_cache_albums},
+        cache::inject_hash,
         create_source, inject_metadata, load_albums, load_all_tracks_raw,
-        types::{AlbumMeta, AudioTrack},
+        types::{AlbumMeta, AudioTrack, CurrentTrack, LibraryClient},
     },
     dotfile::DotfileSchema,
     error::AppError,
@@ -14,71 +14,10 @@ use rodio::Source;
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::Instant,
 };
-use tokio::{
-    runtime::{Builder, Runtime},
-    sync::mpsc::UnboundedSender,
-};
+use tokio::sync::mpsc::UnboundedSender;
 use tracing::{info, instrument};
-
-#[derive(Debug)]
-pub struct LibraryClient {
-    /// TODO: deprecate
-    #[deprecated = "use `albums` field instead"]
-    pub audio_tracks: Vec<AudioTrack>,
-    pub albums: BTreeMap<AlbumMeta, Vec<AudioTrack>>,
-    pub current_track: Option<CurrentTrack>,
-    pub playback_tx: UnboundedSender<PlaybackEvent>,
-    pub volume: f32,
-    pub loading: bool,
-    hashing_rt: Runtime,
-}
-#[derive(Debug)]
-pub struct CurrentTrack {
-    pub data: AudioTrack,
-    pub duration: Duration,
-}
-
-impl LibraryClient {
-    pub fn set_loading(&mut self, loading: bool) -> &mut Self {
-        self.loading = loading;
-        self
-    }
-}
-
-// volume methods
-impl LibraryClient {
-    pub fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
-        let audio_tracks = try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default();
-        Self {
-            audio_tracks: audio_tracks.clone(),
-            loading: false,
-            volume: 1.0,
-            current_track: None,
-            hashing_rt: Builder::new_multi_thread()
-                // ensure hash is written in reasonable amount of time
-                // for 20~50Mb FLACs
-                .worker_threads(8)
-                .thread_name("hashing-worker")
-                .build()
-                .expect("Creating a tokio runtime on 12 threads"),
-            albums: try_load_cache_albums(audio_tracks),
-            playback_tx,
-        }
-    }
-
-    pub fn cleanup(self) {
-        self.hashing_rt.shutdown_background();
-    }
-
-    pub fn dedup(&mut self) {
-        let path_cmp = |a: &AudioTrack, b: &AudioTrack| a.path.cmp(&b.path);
-        self.audio_tracks.sort_by(path_cmp);
-        self.audio_tracks.dedup();
-        self.audio_tracks.sort();
-    }
-}
 
 impl PlayableClient for LibraryClient {
     fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {

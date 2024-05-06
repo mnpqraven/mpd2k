@@ -21,9 +21,19 @@ where
             .iter()
             .map(|(meta, _tracks)| {
                 Row::new([
-                    Cell::from(meta.name.clone().unwrap_or_default()),
-                    Cell::from(meta.album_artist.clone().unwrap_or_default()),
-                    Cell::from(format!("{}", meta.date.0.unwrap())),
+                    Cell::from(
+                        meta.name
+                            .as_ref()
+                            .map(|e| e.to_string())
+                            .unwrap_or_default(),
+                    ),
+                    Cell::from(
+                        meta.album_artist
+                            .as_ref()
+                            .map(|e| e.to_string())
+                            .unwrap_or_default(),
+                    ),
+                    Cell::from(meta.date.0.unwrap().to_string()),
                 ])
             })
             .collect::<Vec<Row>>();

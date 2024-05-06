@@ -1,14 +1,41 @@
-use crate::{backend::utils::empty_to_option, error::AppError};
+use crate::{
+    backend::utils::empty_to_option, client::events::PlaybackEvent, dotfile::DotfileSchema,
+    error::AppError,
+};
 use audiotags::TimestampTag;
 use chrono::{Datelike, NaiveDate};
 use csv::StringRecord;
 use std::{
-    cmp::Ordering,
-    fmt::Display,
+    collections::BTreeMap,
     fs::read_dir,
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
+use tokio::{
+    runtime::{Builder, Runtime},
+    sync::mpsc::UnboundedSender,
+};
+
+use super::cache::{try_load_cache, try_load_cache_albums};
+
+#[derive(Debug)]
+pub struct LibraryClient {
+    /// TODO: deprecate
+    // #[deprecated = "use `albums` field instead"]
+    pub audio_tracks: Vec<AudioTrack>,
+    pub albums: BTreeMap<AlbumMeta, Vec<AudioTrack>>,
+    pub current_track: Option<CurrentTrack>,
+    pub playback_tx: UnboundedSender<PlaybackEvent>,
+    pub volume: f32,
+    pub loading: bool,
+    pub hashing_rt: Runtime,
+}
+#[derive(Debug)]
+pub struct CurrentTrack {
+    pub data: AudioTrack,
+    pub duration: Duration,
+}
 
 #[allow(dead_code)]
 #[derive(Debug, strum::Display)]
@@ -24,23 +51,18 @@ pub struct AudioTrack {
     pub name: Arc<str>,
     pub path: Arc<str>,
     pub artist: Option<Arc<str>>,
-    #[deprecated = "use Arc<str> instead"]
-    pub album: Option<String>,
-    #[deprecated = "use Arc<str> instead"]
-    pub album_artist: Option<String>,
+    pub album: Option<Arc<str>>,
+    pub album_artist: Option<Arc<str>>,
     pub track_no: Option<u16>,
     pub date: SomeAlbumDate,
-    #[deprecated = "use Arc<str> instead"]
-    pub binary_hash: Option<String>,
+    pub binary_hash: Option<Arc<str>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct AlbumMeta {
-    #[deprecated = "use Arc<str> instead"]
-    pub album_artist: Option<String>,
+    pub album_artist: Option<Arc<str>>,
     pub date: SomeAlbumDate,
-    #[deprecated = "use Arc<str> instead"]
-    pub name: Option<String>,
+    pub name: Option<Arc<str>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -82,20 +104,23 @@ impl AudioTrack {
             self.name.to_string(),
             self.path.to_string(),
             self.track_no.map(|no| no.to_string()).unwrap_or_default(),
-            self.artist
+            self.artist.as_ref().map(Arc::to_string).unwrap_or_default(),
+            self.album.as_ref().map(Arc::to_string).unwrap_or_default(),
+            self.album_artist
                 .as_ref()
-                .map(|e| e.to_string())
+                .map(Arc::to_string)
                 .unwrap_or_default(),
-            self.album.clone().unwrap_or_default(),
-            self.album_artist.clone().unwrap_or_default(),
             self.date
                 .0
                 .as_ref()
-                .map(|e| e.to_string())
+                .map(AlbumDate::to_string)
                 .unwrap_or_default(),
             // ----
             // NOTE: ALWAYS PUT THIS LAST FOR `record_hash`
-            self.binary_hash.clone().unwrap_or_default(),
+            self.binary_hash
+                .as_ref()
+                .map(Arc::to_string)
+                .unwrap_or_default(),
         ];
         StringRecord::from(as_vec.as_slice())
     }
@@ -108,13 +133,13 @@ impl AudioTrack {
             name: record[0].into(),
             path: record[1].into(),
             track_no: empty_to_option(&record[2]),
-            artist: empty_to_option(&record[3]),
-            album: empty_to_option(&record[4]),
-            album_artist: empty_to_option(&record[5]),
+            artist: empty_to_option::<String>(&record[3]).map(Into::into),
+            album: empty_to_option::<String>(&record[4]).map(Into::into),
+            album_artist: empty_to_option::<String>(&record[5]).map(Into::into),
             date: SomeAlbumDate(AlbumDate::parse(TimestampTag::Unknown(
                 record[6].to_string(),
             ))),
-            binary_hash: empty_to_option(&record[7]),
+            binary_hash: empty_to_option::<String>(&record[7]).map(Into::into),
         };
 
         Ok(track)
@@ -160,99 +185,38 @@ impl AlbumDate {
     }
 }
 
-impl Display for AlbumDate {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut s = self.year.to_string();
-        if let Some(month) = self.month {
-            s.push_str(&format!(".{month}"));
+impl LibraryClient {
+    pub fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
+        let audio_tracks = try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default();
+        Self {
+            audio_tracks: audio_tracks.clone(),
+            loading: false,
+            volume: 1.0,
+            current_track: None,
+            hashing_rt: Builder::new_multi_thread()
+                // ensure hash is written in reasonable amount of time
+                // for 20~50Mb FLACs
+                .worker_threads(8)
+                .thread_name("hashing-worker")
+                .build()
+                .expect("Creating a tokio runtime on 12 threads"),
+            albums: try_load_cache_albums(audio_tracks),
+            playback_tx,
         }
-        if let Some(day) = self.day {
-            s.push_str(&format!(".{day}"));
-        }
-        write!(f, "{}", s)
     }
-}
 
-impl Ord for AlbumDate {
-    fn cmp(&self, other: &Self) -> Ordering {
-        if self.year != other.year {
-            return self.year.cmp(&other.year);
-        }
-        if self.month != other.month {
-            return self.month.cmp(&other.month);
-        }
-        self.day.cmp(&other.day)
+    pub fn set_loading(&mut self, loading: bool) {
+        self.loading = loading;
     }
-}
-impl PartialOrd for AlbumDate {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
 
-impl Ord for AlbumMeta {
-    fn cmp(&self, other: &Self) -> Ordering {
-        if self.album_artist != other.album_artist {
-            return self.album_artist.cmp(&other.album_artist);
-        }
-        if self.date != other.date {
-            return self.date.cmp(&other.date);
-        }
-        if self.name != other.name {
-            return self.name.cmp(&other.name);
-        }
-        Ordering::Equal
+    pub fn cleanup(self) {
+        self.hashing_rt.shutdown_background();
     }
-}
 
-impl PartialOrd for AlbumMeta {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for SomeAlbumDate {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self.0, other.0) {
-            (None, Some(_)) => Ordering::Greater,
-            (Some(_), None) => Ordering::Less,
-            (None, None) => Ordering::Equal,
-            (Some(a), Some(b)) => a.cmp(&b),
-        }
-    }
-}
-
-impl PartialOrd for SomeAlbumDate {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for AudioTrack {
-    fn cmp(&self, other: &Self) -> Ordering {
-        if self.album_artist != other.album_artist {
-            return self.album_artist.cmp(&other.album_artist);
-        }
-        if self.date != other.date {
-            return self.date.cmp(&other.date);
-        }
-        if self.album != other.album {
-            // None album goes last
-            return self.album.cmp(&other.album);
-        }
-        if self.track_no != other.track_no {
-            return self.track_no.cmp(&other.track_no);
-        }
-        if self.path != other.path {
-            return self.path.cmp(&other.path);
-        }
-        Ordering::Equal
-    }
-}
-
-impl PartialOrd for AudioTrack {
-    /// album artist > date > album name > disc no > track no > path
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
+    pub fn dedup(&mut self) {
+        let path_cmp = |a: &AudioTrack, b: &AudioTrack| a.path.cmp(&b.path);
+        self.audio_tracks.sort_by(path_cmp);
+        self.audio_tracks.dedup();
+        self.audio_tracks.sort();
     }
 }

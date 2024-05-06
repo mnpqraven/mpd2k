@@ -30,7 +30,7 @@ pub struct TuiState {
     pub show_right_sidebar: bool,
     pub show_left_sidebar: bool,
     pub image: Arc<Mutex<ImageState>>,
-    pub last_album: Option<String>,
+    pub last_album: Option<Arc<str>>,
     pub key_queue: Vec<KeyCode>,
 }
 impl Default for TuiState {

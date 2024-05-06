@@ -5,6 +5,7 @@ use ratatui::{
     prelude::*,
     widgets::{TableState, *},
 };
+use std::sync::Arc;
 use std::time::Duration;
 
 #[allow(non_snake_case)]
@@ -82,11 +83,11 @@ fn MainboxRight<Client: PlayableClient>(
 ) {
     let rows = data
         .audio_tracks()
-        .iter()
+        .into_iter()
         .map(|data| {
             Row::new([
                 Cell::from(data.name.as_ref()),
-                Cell::from(data.artist.to_owned().unwrap_or_default()),
+                Cell::from(data.artist.as_ref().map(Arc::to_string).unwrap_or_default()),
                 Cell::from(data.track_no.unwrap_or_default().to_string()),
             ])
         })
