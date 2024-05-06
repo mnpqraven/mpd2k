@@ -10,6 +10,7 @@ use chrono::{Datelike, NaiveDate};
 use core::cmp::Ordering;
 use rodio::Decoder;
 use std::{
+    collections::HashSet,
     fmt::{Debug, Display},
     fs::{read_dir, File},
     io::BufReader,
@@ -17,12 +18,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::{runtime::Handle, task::JoinSet};
-use tracing::instrument;
+use tracing::{info, instrument};
 use walkdir::WalkDir;
 
 pub mod cache;
 mod csv;
 pub mod hash;
+pub mod types;
 
 // NOTE: keep expanding this or migrate to album(outer struct) > tracks(inner struct)
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -35,6 +37,13 @@ pub struct AudioTrack {
     pub track_no: Option<u16>,
     pub date: SomeAlbumDate,
     pub binary_hash: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct AlbumMeta {
+    album_artist: Option<String>,
+    date: SomeAlbumDate,
+    name: Option<String>,
 }
 
 impl AudioTrack {
@@ -181,6 +190,27 @@ impl PartialOrd for AlbumDate {
     }
 }
 
+impl Ord for AlbumMeta {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.album_artist != other.album_artist {
+            return self.album_artist.cmp(&other.album_artist);
+        }
+        if self.date != other.date {
+            return self.date.cmp(&other.date);
+        }
+        if self.name != other.name {
+            return self.name.cmp(&other.name);
+        }
+        Ordering::Equal
+    }
+}
+
+impl PartialOrd for AlbumMeta {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl Ord for SomeAlbumDate {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self.0, other.0) {
@@ -251,6 +281,47 @@ pub async fn load_all_tracks_raw<P: AsRef<Path> + Debug>(
     // TODO: filtering duplicate paths
     let mut lib = tree_arc.lock()?;
     lib.dedup();
+
+    Ok(())
+}
+
+#[instrument(skip_all, ret)]
+pub fn load_albums(tree_arc: Arc<Mutex<LibraryClient>>) -> Result<(), AppError> {
+    let mut lib = tree_arc.lock()?;
+
+    let mut distict_album_names = HashSet::new();
+    for trk in &lib.audio_tracks {
+        distict_album_names.insert(trk.album.clone());
+    }
+    info!(?distict_album_names);
+
+    for album in distict_album_names.iter() {
+        let mut tracks: Vec<AudioTrack> = lib
+            .audio_tracks
+            .iter()
+            .filter(|e| e.album == *album)
+            .cloned()
+            .collect();
+        tracks.sort();
+
+        // TODO: mean math
+        let (date, album_artist) = tracks
+            .first()
+            .map(|e| (e.date, e.album_artist.clone()))
+            .unwrap();
+
+        // TODO: handle else
+        if let Some(album) = album {
+            lib.albums.insert(
+                AlbumMeta {
+                    album_artist,
+                    date,
+                    name: Some(album.to_string()),
+                },
+                tracks,
+            );
+        }
+    }
 
     Ok(())
 }

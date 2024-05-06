@@ -2,7 +2,7 @@ use super::{events::PlaybackEvent, ClientKind, PlayableClient};
 use crate::{
     backend::library::{
         cache::{inject_hash, try_load_cache},
-        create_source, inject_metadata, load_all_tracks_raw, AudioTrack,
+        create_source, inject_metadata, load_albums, load_all_tracks_raw, AlbumMeta, AudioTrack,
     },
     dotfile::DotfileSchema,
     error::AppError,
@@ -11,6 +11,7 @@ use crate::{
 use ratatui::widgets::TableState;
 use rodio::Source;
 use std::{
+    collections::BTreeMap,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -23,6 +24,7 @@ use tracing::{info, instrument};
 #[derive(Debug)]
 pub struct LibraryClient {
     pub audio_tracks: Vec<AudioTrack>,
+    pub albums: BTreeMap<AlbumMeta, Vec<AudioTrack>>,
     pub current_track: Option<CurrentTrack>,
     pub playback_tx: UnboundedSender<PlaybackEvent>,
     pub volume: f32,
@@ -58,6 +60,7 @@ impl LibraryClient {
                 .thread_name("hashing-worker")
                 .build()
                 .expect("Creating a tokio runtime on 12 threads"),
+            albums: BTreeMap::new(),
             playback_tx,
         }
     }
@@ -218,6 +221,7 @@ impl PlayableClient for LibraryClient {
                 load_all_tracks_raw(lib_root, self_arc.clone(), hard_update).await?;
                 inject_metadata(self_arc.clone(), hash_handle.clone()).await?;
                 inject_hash(self_arc.clone(), hash_handle.clone(), true).await?;
+                load_albums(self_arc.clone())?;
 
                 if let Ok(mut lib) = self_arc.lock() {
                     lib.set_loading(false);
