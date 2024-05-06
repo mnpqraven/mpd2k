@@ -7,6 +7,7 @@ use std::{
     fmt::Display,
     fs::read_dir,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 #[allow(dead_code)]
@@ -20,20 +21,25 @@ pub enum HashKind {
 // NOTE: keep expanding this or migrate to album(outer struct) > tracks(inner struct)
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct AudioTrack {
-    pub name: String,
-    pub path: String,
-    pub artist: Option<String>,
+    pub name: Arc<str>,
+    pub path: Arc<str>,
+    pub artist: Option<Arc<str>>,
+    #[deprecated = "use Arc<str> instead"]
     pub album: Option<String>,
+    #[deprecated = "use Arc<str> instead"]
     pub album_artist: Option<String>,
     pub track_no: Option<u16>,
     pub date: SomeAlbumDate,
+    #[deprecated = "use Arc<str> instead"]
     pub binary_hash: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct AlbumMeta {
+    #[deprecated = "use Arc<str> instead"]
     pub album_artist: Option<String>,
     pub date: SomeAlbumDate,
+    #[deprecated = "use Arc<str> instead"]
     pub name: Option<String>,
 }
 
@@ -52,7 +58,7 @@ impl AudioTrack {
     const CSV_COLS: usize = 8;
 
     // TODO: perf + unicode check
-    pub fn new<P: AsRef<Path> + ToString>(path: P) -> Self {
+    pub fn new<P: AsRef<Path> + Into<Arc<str>>>(path: P) -> Self {
         let name = path
             .as_ref()
             .file_name()
@@ -60,8 +66,8 @@ impl AudioTrack {
             .to_string_lossy()
             .to_string();
         Self {
-            name,
-            path: path.to_string(),
+            name: name.into(),
+            path: path.into(),
             artist: None,
             album: None,
             album_artist: None,
@@ -73,10 +79,13 @@ impl AudioTrack {
 
     pub fn to_record(&self) -> StringRecord {
         let as_vec: &[String; Self::CSV_COLS] = &[
-            self.name.clone(),
-            self.path.clone(),
+            self.name.to_string(),
+            self.path.to_string(),
             self.track_no.map(|no| no.to_string()).unwrap_or_default(),
-            self.artist.clone().unwrap_or_default(),
+            self.artist
+                .as_ref()
+                .map(|e| e.to_string())
+                .unwrap_or_default(),
             self.album.clone().unwrap_or_default(),
             self.album_artist.clone().unwrap_or_default(),
             self.date
@@ -96,8 +105,8 @@ impl AudioTrack {
             return Err(AppError::CsvParse);
         }
         let track = AudioTrack {
-            name: record[0].to_string(),
-            path: record[1].to_string(),
+            name: record[0].into(),
+            path: record[1].into(),
             track_no: empty_to_option(&record[2]),
             artist: empty_to_option(&record[3]),
             album: empty_to_option(&record[4]),
@@ -112,7 +121,7 @@ impl AudioTrack {
     }
 
     pub fn try_cover_path(&self) -> Option<PathBuf> {
-        let track_path = PathBuf::from(self.path.clone());
+        let track_path = PathBuf::from(self.path.as_ref());
         let dir = track_path.parent();
         if let Some(dir) = dir {
             let img_paths: Vec<PathBuf> = read_dir(dir)

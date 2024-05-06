@@ -1,6 +1,6 @@
 use crate::client::PlayableClient;
 use crate::tui::app::AppState;
-use ratatui::widgets::{TableState, *};
+use ratatui::widgets::*;
 use ratatui::{buffer::Buffer, layout::Rect};
 
 #[allow(non_snake_case)]

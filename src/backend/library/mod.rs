@@ -11,6 +11,7 @@ use std::{
     fmt::Debug,
     fs::File,
     io::BufReader,
+    ops::Deref,
     path::Path,
     sync::{Arc, Mutex},
 };
@@ -109,7 +110,7 @@ pub async fn inject_metadata(
         let arced = tree_arc.clone();
         let _ = join_set.spawn_on(
             async move {
-                let trk = read_tag(track.path.clone()).unwrap();
+                let trk = read_tag(track.path.as_ref()).unwrap();
                 {
                     let mut guard = arced.lock().unwrap();
                     let track = guard
@@ -131,20 +132,19 @@ pub async fn inject_metadata(
 
 /// This function is not cheap, running in parallel is recommended
 #[instrument]
-fn read_tag(path: String) -> Result<AudioTrack, LibraryError> {
+fn read_tag<P: AsRef<Path> + Debug + Into<Arc<str>>>(path: P) -> Result<AudioTrack, LibraryError> {
     let tag = Tag::new().read_from_path(&path)?;
     let name = tag.title().unwrap_or_default().to_string();
     let album = tag.album_title().map(|e| e.to_owned());
-    let artist = tag.artist().map(|e| e.to_owned());
+    let artist = tag.artist().map(Into::into);
     let date = tag.date_raw().and_then(AlbumDate::parse);
     let album_artist = tag.album_artist().map(|e| e.to_owned());
     let track_no = tag.track_number();
 
     let track = AudioTrack {
-        name,
-        path,
+        name: name.into(),
+        path: path.into(),
         track_no,
-        // _meta: entry,
         artist,
         date: SomeAlbumDate(date),
         album,

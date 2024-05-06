@@ -25,6 +25,7 @@ use tracing::{info, instrument};
 #[derive(Debug)]
 pub struct LibraryClient {
     /// TODO: deprecate
+    #[deprecated = "use `albums` field instead"]
     pub audio_tracks: Vec<AudioTrack>,
     pub albums: BTreeMap<AlbumMeta, Vec<AudioTrack>>,
     pub current_track: Option<CurrentTrack>,
@@ -33,8 +34,7 @@ pub struct LibraryClient {
     pub loading: bool,
     hashing_rt: Runtime,
 }
-// NOTE: does this really need clone ?
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct CurrentTrack {
     pub data: AudioTrack,
     pub duration: Duration,
@@ -93,7 +93,7 @@ impl PlayableClient for LibraryClient {
             .unwrap();
         info!(?track);
 
-        let source = create_source(track.path.clone()).unwrap();
+        let source = create_source(track.path.as_ref()).unwrap();
 
         self.current_track = Some(CurrentTrack {
             data: track.clone(),
@@ -102,7 +102,7 @@ impl PlayableClient for LibraryClient {
 
         let _ = self
             .playback_tx
-            .send(PlaybackEvent::Play(track.path.clone()));
+            .send(PlaybackEvent::Play(track.path.to_string()));
         Ok(())
     }
 

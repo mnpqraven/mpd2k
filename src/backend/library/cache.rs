@@ -96,7 +96,7 @@ pub async fn inject_hash(
         let arced = lib_arc.clone();
         let _ = join_set.spawn_on(
             async move {
-                let hash = hash_file(track.path.clone(), HashKind::XxHash)?;
+                let hash = hash_file(track.path.as_ref(), HashKind::XxHash)?;
 
                 let track = {
                     // hash insertion

@@ -1,5 +1,3 @@
-use crate::backend::library::types::AudioTrack;
-use crate::client::library::CurrentTrack;
 use crate::client::PlayableClient;
 use crate::tui::app::AppState;
 use ratatui::{buffer::Buffer, layout::Rect};
@@ -87,7 +85,7 @@ fn MainboxRight<Client: PlayableClient>(
         .iter()
         .map(|data| {
             Row::new([
-                Cell::from(data.name.clone()),
+                Cell::from(data.name.as_ref()),
                 Cell::from(data.artist.to_owned().unwrap_or_default()),
                 Cell::from(data.track_no.unwrap_or_default().to_string()),
             ])

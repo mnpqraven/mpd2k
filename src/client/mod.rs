@@ -23,7 +23,7 @@ pub trait PlayableClient {
 
     fn loading(&self) -> bool;
 
-    fn audio_tracks(&self) -> Vec<&AudioTrack> ;
+    fn audio_tracks(&self) -> Vec<&AudioTrack>;
     fn albums(&self) -> &BTreeMap<AlbumMeta, Vec<AudioTrack>>;
 
     fn select_next_track(&self, table_state: &mut TuiState) -> Result<(), AppError>;

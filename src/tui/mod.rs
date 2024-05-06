@@ -1,4 +1,4 @@
-use self::app::{AppState, TuiState};
+use self::app::AppState;
 use self::events::EventHandler;
 use crate::client::PlayableClient;
 use crate::error::AppError;
@@ -6,7 +6,7 @@ use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use crossterm::execute;
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::backend::Backend;
-use ratatui::widgets::{StatefulWidget, Widget};
+use ratatui::widgets::Widget;
 use ratatui::Terminal;
 use std::io;
 use std::panic;
