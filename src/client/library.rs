@@ -1,7 +1,7 @@
 use super::{events::PlaybackEvent, ClientKind, PlayableClient};
 use crate::{
     backend::library::{
-        cache::{inject_hash, try_load_cache},
+        cache::{inject_hash, try_load_cache, try_load_cache_albums},
         create_source, inject_metadata, load_albums, load_all_tracks_raw,
         types::{AlbumMeta, AudioTrack},
     },
@@ -24,6 +24,7 @@ use tracing::{info, instrument};
 
 #[derive(Debug)]
 pub struct LibraryClient {
+    /// TODO: deprecate
     pub audio_tracks: Vec<AudioTrack>,
     pub albums: BTreeMap<AlbumMeta, Vec<AudioTrack>>,
     pub current_track: Option<CurrentTrack>,
@@ -49,8 +50,9 @@ impl LibraryClient {
 // volume methods
 impl LibraryClient {
     pub fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
+        let audio_tracks = try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default();
         Self {
-            audio_tracks: try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default(),
+            audio_tracks: audio_tracks.clone(),
             loading: false,
             volume: 1.0,
             current_track: None,
@@ -61,7 +63,7 @@ impl LibraryClient {
                 .thread_name("hashing-worker")
                 .build()
                 .expect("Creating a tokio runtime on 12 threads"),
-            albums: BTreeMap::new(),
+            albums: try_load_cache_albums(audio_tracks),
             playback_tx,
         }
     }
@@ -200,8 +202,9 @@ impl PlayableClient for LibraryClient {
         self.loading
     }
 
-    fn audio_tracks(&self) -> &[AudioTrack] {
-        &self.audio_tracks
+    fn audio_tracks(&self) -> Vec<&AudioTrack> {
+        let t: Vec<&AudioTrack> = self.albums().values().flatten().collect();
+        t
     }
 
     fn albums(&self) -> &BTreeMap<AlbumMeta, Vec<AudioTrack>> {

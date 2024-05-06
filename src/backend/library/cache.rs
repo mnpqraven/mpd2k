@@ -1,4 +1,4 @@
-use super::{csv::app_writer_append, hash::hash_file, HashKind};
+use super::{csv::app_writer_append, hash::hash_file, AlbumMeta, HashKind};
 use crate::{
     backend::library::{
         csv::{app_reader, app_writer_non_append},
@@ -9,6 +9,7 @@ use crate::{
 };
 use csv::StringRecord;
 use std::{
+    collections::BTreeMap,
     fmt::Debug,
     path::Path,
     sync::{Arc, Mutex},
@@ -32,6 +33,28 @@ pub fn try_load_cache<P: AsRef<Path> + Debug>(path: P) -> Result<Vec<AudioTrack>
 
     info!("loaded {} items from cache", tracks.len());
     Ok(tracks)
+}
+
+#[instrument]
+pub fn try_load_cache_albums(tracks: Vec<AudioTrack>) -> BTreeMap<AlbumMeta, Vec<AudioTrack>> {
+    let mut tree: BTreeMap<AlbumMeta, Vec<AudioTrack>> = BTreeMap::new();
+    for track in tracks {
+        let track_cloned = track.clone();
+        let key: AlbumMeta = AlbumMeta {
+            album_artist: track.album_artist,
+            date: track.date,
+            name: track.album,
+        };
+        match tree.get_mut(&key) {
+            Some(existing_tracks) => existing_tracks.push(track_cloned),
+            None => {
+                tree.insert(key, vec![track_cloned]);
+            }
+        }
+    }
+    tree.values_mut().for_each(|trks| trks.sort());
+
+    tree
 }
 
 fn record_hash(record: &StringRecord) -> Option<&str> {

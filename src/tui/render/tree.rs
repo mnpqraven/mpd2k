@@ -21,8 +21,8 @@ where
             .iter()
             .map(|(meta, _tracks)| {
                 Row::new([
-                    Cell::from(meta.album_artist.clone().unwrap_or_default()),
                     Cell::from(meta.name.clone().unwrap_or_default()),
+                    Cell::from(meta.album_artist.clone().unwrap_or_default()),
                     Cell::from(format!("{}", meta.date.0.unwrap())),
                 ])
             })
@@ -37,7 +37,7 @@ where
         let mut state = app.tui_state.library_table.lock().unwrap();
         ratatui::widgets::StatefulWidget::render(
             Table::new(rows, widths)
-                .header(Row::new(["Artist", "Album", "Date"]))
+                .header(Row::new(["Album", "Artist", "Date"]))
                 .column_spacing(1)
                 .block(Block::new().borders(Borders::all())),
             rect_dir_seeker[0],

@@ -48,7 +48,9 @@ fn MainBoxLeft<Client: PlayableClient>(
     buf: &mut Buffer,
     state: &mut TableState,
 ) {
-    let current_track = state.selected().and_then(|f| data.audio_tracks().get(f));
+    let tracks = data.audio_tracks();
+    let current_track = state.selected().and_then(|f| tracks.get(f));
+
     let block = Block::new()
         .title("Selected Track [I]")
         .borders(Borders::all());
