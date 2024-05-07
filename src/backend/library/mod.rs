@@ -1,6 +1,7 @@
 use self::types::*;
 use crate::{
     backend::utils::is_supported_audio,
+    client::PlayableClient,
     error::{AppError, LibraryError},
 };
 use audiotags::Tag;
@@ -22,6 +23,7 @@ mod csv;
 mod hash;
 mod traits;
 pub mod types;
+pub mod expr_mod;
 
 /// only load path and name
 #[instrument(skip(tree_arc))]
@@ -98,10 +100,10 @@ pub async fn inject_metadata(
     tree_arc: Arc<Mutex<LibraryClient>>,
     handle: Handle,
 ) -> Result<(), AppError> {
-    let tracks = tree_arc
+    let tracks: Vec<AudioTrack> = tree_arc
         .clone()
         .lock()
-        .map(|lib| lib.audio_tracks.clone())?;
+        .map(|lib| lib.audio_tracks().iter().copied().cloned().collect())?;
 
     let mut join_set = JoinSet::new();
 

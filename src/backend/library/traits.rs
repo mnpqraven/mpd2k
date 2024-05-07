@@ -11,6 +11,13 @@ impl From<AudioTrack> for AlbumMeta {
     }
 }
 
+impl From<&AudioTrack> for AlbumMeta {
+    fn from(value: &AudioTrack) -> Self {
+        let value = value.to_owned();
+        AlbumMeta::from(value)
+    }
+}
+
 impl Display for AlbumDate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = self.year.to_string();

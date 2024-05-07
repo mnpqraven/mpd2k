@@ -2,7 +2,9 @@ use super::{events::PlaybackEvent, ClientKind, PlayableClient};
 use crate::{
     backend::library::{
         cache::inject_hash,
-        create_source, inject_metadata, load_albums, load_all_tracks_raw,
+        create_source,
+        expr_mod::{load_all_tracks_expr, load_hash_expr},
+        inject_metadata, load_albums, load_all_tracks_raw,
         types::{AlbumMeta, AudioTrack, CurrentTrack, LibraryClient, RepeatMode},
     },
     dotfile::DotfileSchema,
@@ -27,31 +29,43 @@ impl PlayableClient for LibraryClient {
 
     #[instrument(skip(self))]
     fn play(&mut self, table_state: &TableState) -> Result<(), AppError> {
-        let track = table_state
+        let some_track = table_state
             .selected()
-            .and_then(|index| self.audio_tracks.get(index))
-            .unwrap();
-        info!(?track);
+            .and_then(|index| self.audio_tracks().get(index).copied().cloned());
 
-        let source = create_source(track.path.as_ref()).unwrap();
+        if let Some(track) = some_track {
+            info!(?track);
 
-        self.current_track = Some(CurrentTrack {
-            data: track.clone(),
-            duration: source.total_duration().unwrap_or_default(),
-        });
+            let source = create_source(track.path.as_ref()).unwrap();
 
-        let _ = self
-            .playback_tx
-            .send(PlaybackEvent::Play(track.path.to_string(), false));
+            self.current_track = Some(CurrentTrack {
+                data: track.clone(),
+                duration: source.total_duration().unwrap_or_default(),
+            });
 
-        // the shuffle list is randomized on every hard play
-        match (self.repeat, self.shuffle) {
-            (_, true) => {
-                self.generate_random_queue()?;
-                self.playback_tx.send(PlaybackEvent::OnlyPlay)?;
-            }
-            (_, false) => {
-                self.playback_tx.send(PlaybackEvent::OnlyPlay)?;
+            // the shuffle list is randomized on every hard play
+            match (self.repeat, self.shuffle) {
+                (_, true) => {
+                    let q = self.generate_random_queue()?;
+                    let cmds = [
+                        PlaybackEvent::SetQueue([track].into()),
+                        PlaybackEvent::AppendQueue(q),
+                        PlaybackEvent::Play,
+                    ];
+                    for cmd in cmds {
+                        self.playback_tx.send(cmd)?;
+                    }
+                }
+                (_, false) => {
+                    let cmds = [
+                        PlaybackEvent::SetQueue([track].into()),
+                        // TODO: queue album by album
+                        PlaybackEvent::Play,
+                    ];
+                    for cmd in cmds {
+                        self.playback_tx.send(cmd)?;
+                    }
+                }
             }
         }
         Ok(())
@@ -63,7 +77,7 @@ impl PlayableClient for LibraryClient {
 
     fn select_next_track(&self, table_state: &mut TuiState) -> Result<(), AppError> {
         let mut table_state = table_state.playback_table.lock().unwrap();
-        let max = self.audio_tracks.len();
+        let max = self.audio_tracks().len();
 
         match table_state.selected() {
             Some(index) => {
@@ -97,7 +111,7 @@ impl PlayableClient for LibraryClient {
 
     fn select_last_track(&self, tui_state: &mut TuiState) -> Result<(), AppError> {
         let mut table_state = tui_state.playback_table.lock()?;
-        let max = self.audio_tracks.len();
+        let max = self.audio_tracks().len();
         table_state.select(Some(max - 1));
         Ok(())
     }
@@ -109,15 +123,16 @@ impl PlayableClient for LibraryClient {
         match (idx, &img_state) {
             (Some(index), _) => {
                 // safe unwrap
-                let track = self.audio_tracks.get(index).unwrap();
-                if track.album != tui_state.last_album {
-                    if let (Ok(mut image), Some(p)) =
-                        (tui_state.image.lock(), track.try_cover_path())
-                    {
-                        image.update(p);
+                if let Some(track) = self.audio_tracks().get(index) {
+                    if track.album != tui_state.last_album {
+                        if let (Ok(mut image), Some(p)) =
+                            (tui_state.image.lock(), track.try_cover_path())
+                        {
+                            image.update(p);
+                        }
                     }
+                    tui_state.last_album.clone_from(&track.album);
                 }
-                tui_state.last_album.clone_from(&track.album);
             }
             (None, Some(_)) => {
                 if let Ok(mut image) = tui_state.image.lock() {
@@ -130,7 +145,7 @@ impl PlayableClient for LibraryClient {
     }
 
     fn pause_unpause(&self) {
-        let _ = self.playback_tx.send(PlaybackEvent::Pause);
+        let _ = self.playback_tx.send(PlaybackEvent::TogglePause);
     }
 
     fn volume_up(&mut self) {
@@ -154,8 +169,7 @@ impl PlayableClient for LibraryClient {
     }
 
     fn audio_tracks(&self) -> Vec<&AudioTrack> {
-        let t: Vec<&AudioTrack> = self.albums().values().flatten().collect();
-        t
+        self.albums().values().flatten().collect()
     }
 
     fn albums(&self) -> &BTreeMap<AlbumMeta, Vec<AudioTrack>> {
@@ -164,7 +178,6 @@ impl PlayableClient for LibraryClient {
 
     /// TODO: impl hash compare
     /// track list also need hash sort and dedup
-    #[instrument(skip_all)]
     fn update_lib(&mut self, self_arc: Option<Arc<Mutex<LibraryClient>>>, hard_update: bool) {
         if let Some(self_arc) = self_arc
             && !self.loading
@@ -175,12 +188,25 @@ impl PlayableClient for LibraryClient {
 
             self.hashing_rt.spawn(async move {
                 let now = Instant::now();
+                info!("inside hashing thread");
 
                 let lib_root = DotfileSchema::parse()?.library_root()?;
-                load_all_tracks_raw(lib_root, self_arc.clone(), hard_update).await?;
-                inject_metadata(self_arc.clone(), hash_handle.clone()).await?;
-                inject_hash(self_arc.clone(), hash_handle.clone(), true).await?;
-                load_albums(self_arc.clone())?;
+                { // OLD CODE
+                     // load_all_tracks_raw(lib_root, self_arc.clone(), hard_update).await?;
+                     // inject_metadata(self_arc.clone(), hash_handle.clone()).await?;
+                     // inject_hash(self_arc.clone(), hash_handle.clone(), true).await?;
+                     // load_albums(self_arc.clone())?;
+                }
+
+                // NEW CODE USING LOADING THEN ADDING TO ALBUM BTREE
+                load_all_tracks_expr(
+                    &lib_root,
+                    self_arc.clone(),
+                    &hash_handle.clone(),
+                    hard_update,
+                )
+                .await?;
+                load_hash_expr(self_arc.clone(), &hash_handle.clone()).await?;
 
                 if let Ok(mut lib) = self_arc.lock() {
                     lib.set_loading(false);
@@ -216,9 +242,11 @@ impl PlayableClient for LibraryClient {
     fn toggle_shuffle(&mut self) {
         self.shuffle = !self.shuffle;
     }
+
     fn get_repeat(&self) -> RepeatMode {
         self.repeat
     }
+
     fn get_shuffle(&self) -> bool {
         self.shuffle
     }
@@ -235,9 +263,6 @@ impl PlayableClient for LibraryClient {
             .collect();
 
         let q_arced: Arc<[AudioTrack]> = Arc::from(q);
-        // TODO: safe unwrap
-        self.playback_tx
-            .send(PlaybackEvent::AppendQueue(q_arced.clone()))?;
 
         let elapsed = now.elapsed().as_millis();
         info!(elapsed);

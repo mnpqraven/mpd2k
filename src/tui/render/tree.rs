@@ -33,7 +33,7 @@ where
                             .map(|e| e.to_string())
                             .unwrap_or_default(),
                     ),
-                    Cell::from(meta.date.0.unwrap().to_string()),
+                    Cell::from(meta.date.0.map(|e| e.to_string()).unwrap_or_default()),
                 ])
             })
             .collect::<Vec<Row>>();

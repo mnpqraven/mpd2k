@@ -14,13 +14,12 @@ pub enum PlaybackEvent {
     ///
     /// playing/resuming, pause state is handled by `PlaybackEvent::Pause`
     /// bool indicates whether or not the sink plays instantly
-    Play(String, bool),
-    /// no action if already playing
-    OnlyPlay,
     SetQueue(Arc<[AudioTrack]>),
     AppendQueue(Arc<[AudioTrack]>),
+    /// no action if already playing
+    Play,
     /// this toggles between play and paused state
-    Pause,
+    TogglePause,
     Tick,
     VolumeUp,
     VolumeDown,
@@ -74,16 +73,8 @@ impl PlaybackServer {
             let sink = self.sink.arced();
 
             match message {
-                PlaybackEvent::Play(path, should_play) => {
-                    let source = create_source(path)?;
-                    sink.clear();
-                    sink.append(source);
-                    if should_play {
-                        sink.play();
-                    }
-                }
-                PlaybackEvent::OnlyPlay => sink.play(),
-                PlaybackEvent::Pause => match sink.is_paused() {
+                PlaybackEvent::Play => sink.play(),
+                PlaybackEvent::TogglePause => match sink.is_paused() {
                     true => sink.play(),
                     false => sink.pause(),
                 },

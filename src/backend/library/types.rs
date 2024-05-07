@@ -1,6 +1,8 @@
 use crate::{
-    backend::utils::empty_to_option, client::events::PlaybackEvent, dotfile::DotfileSchema,
-    error::AppError,
+    backend::utils::empty_to_option,
+    client::events::PlaybackEvent,
+    dotfile::DotfileSchema,
+    error::{AppError, LibraryError},
 };
 use audiotags::TimestampTag;
 use chrono::{Datelike, NaiveDate};
@@ -16,8 +18,12 @@ use tokio::{
     runtime::{Builder, Runtime},
     sync::mpsc::UnboundedSender,
 };
+use tracing::info;
 
-use super::cache::{try_load_cache, try_load_cache_albums};
+use super::{
+    cache::{try_load_cache, try_load_cache_albums},
+    read_tag,
+};
 
 #[derive(Debug)]
 pub struct LibraryClient {
@@ -73,7 +79,7 @@ pub struct AudioTrack {
     pub binary_hash: Option<Arc<str>>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct AlbumMeta {
     pub album_artist: Option<Arc<str>>,
     pub date: SomeAlbumDate,
@@ -85,7 +91,8 @@ pub struct SomeAlbumDate(pub Option<AlbumDate>);
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct AlbumDate {
-    // at year is always `Some`, if we can't parse year then the whole struct is safe to be `None`
+    // at least year is always `Some`, if we can't parse year then the whole
+    // struct is safe to be `None`
     pub year: u32,
     pub month: Option<u8>,
     pub day: Option<u8>,
@@ -156,8 +163,15 @@ impl AudioTrack {
             ))),
             binary_hash: empty_to_option::<String>(&record[7]).map(Into::into),
         };
+        info!(?track);
 
         Ok(track)
+    }
+
+    pub fn update_tag(&mut self) -> Result<(), LibraryError> {
+        let new_trk = read_tag(self.path.as_ref())?;
+        self.clone_from(&new_trk);
+        Ok(())
     }
 
     pub fn try_cover_path(&self) -> Option<PathBuf> {
@@ -203,6 +217,7 @@ impl AlbumDate {
 impl LibraryClient {
     pub fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
         let audio_tracks = try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default();
+        info!(?audio_tracks);
         Self {
             audio_tracks: audio_tracks.clone(),
             loading: false,
@@ -219,6 +234,12 @@ impl LibraryClient {
             playback_tx,
             shuffle: false,
             repeat: Default::default(),
+        }
+    }
+
+    pub fn sort_albums(&mut self) {
+        for trks in self.albums.values_mut() {
+            trks.sort();
         }
     }
 
