@@ -12,6 +12,8 @@ pub enum AppError {
 
     #[error("The mutex was poisoned")]
     PoisonError(String),
+    #[error("Failed sending message to thread")]
+    SendError(String),
 
     #[error(transparent)]
     Walkdir(#[from] walkdir::Error),
@@ -55,5 +57,11 @@ pub enum MpdError {
 impl<T> From<std::sync::PoisonError<T>> for AppError {
     fn from(err: std::sync::PoisonError<T>) -> Self {
         AppError::PoisonError(err.to_string())
+    }
+}
+
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for AppError {
+    fn from(err: tokio::sync::mpsc::error::SendError<T>) -> Self {
+        AppError::SendError(err.to_string())
     }
 }

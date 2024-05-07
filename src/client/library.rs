@@ -3,12 +3,13 @@ use crate::{
     backend::library::{
         cache::inject_hash,
         create_source, inject_metadata, load_albums, load_all_tracks_raw,
-        types::{AlbumMeta, AudioTrack, CurrentTrack, LibraryClient},
+        types::{AlbumMeta, AudioTrack, CurrentTrack, LibraryClient, RepeatMode},
     },
     dotfile::DotfileSchema,
     error::AppError,
     tui::app::TuiState,
 };
+use rand::seq::SliceRandom;
 use ratatui::widgets::TableState;
 use rodio::Source;
 use std::{
@@ -41,7 +42,18 @@ impl PlayableClient for LibraryClient {
 
         let _ = self
             .playback_tx
-            .send(PlaybackEvent::Play(track.path.to_string()));
+            .send(PlaybackEvent::Play(track.path.to_string(), false));
+
+        // the shuffle list is randomized on every hard play
+        match (self.repeat, self.shuffle) {
+            (_, true) => {
+                self.generate_random_queue()?;
+                self.playback_tx.send(PlaybackEvent::OnlyPlay)?;
+            }
+            (_, false) => {
+                self.playback_tx.send(PlaybackEvent::OnlyPlay)?;
+            }
+        }
         Ok(())
     }
 
@@ -122,7 +134,7 @@ impl PlayableClient for LibraryClient {
     }
 
     fn volume_up(&mut self) {
-        let _ = self.playback_tx.send(PlaybackEvent::VolumeDown);
+        let _ = self.playback_tx.send(PlaybackEvent::VolumeUp);
         match self.volume {
             0.95.. => self.volume = 1.0,
             _ => self.volume += 0.05,
@@ -130,7 +142,7 @@ impl PlayableClient for LibraryClient {
     }
 
     fn volume_down(&mut self) {
-        let _ = self.playback_tx.send(PlaybackEvent::VolumeUp);
+        let _ = self.playback_tx.send(PlaybackEvent::VolumeDown);
         match self.volume {
             0.05.. => self.volume -= 0.05,
             _ => self.volume = 0.0,
@@ -191,5 +203,44 @@ impl PlayableClient for LibraryClient {
 
     fn cleanup(self) {
         self.hashing_rt.shutdown_background();
+    }
+
+    fn cycle_repeat(&mut self) {
+        self.repeat = match self.repeat {
+            RepeatMode::Off => RepeatMode::One,
+            RepeatMode::One => RepeatMode::All,
+            RepeatMode::All => RepeatMode::Off,
+        };
+    }
+
+    fn toggle_shuffle(&mut self) {
+        self.shuffle = !self.shuffle;
+    }
+    fn get_repeat(&self) -> RepeatMode {
+        self.repeat
+    }
+    fn get_shuffle(&self) -> bool {
+        self.shuffle
+    }
+
+    #[instrument(skip_all)]
+    fn generate_random_queue(&self) -> Result<Arc<[AudioTrack]>, AppError> {
+        let now = Instant::now();
+        let mut rng = &mut rand::thread_rng();
+        let q: Vec<AudioTrack> = self
+            .audio_tracks()
+            .choose_multiple(&mut rng, 20)
+            .copied()
+            .cloned()
+            .collect();
+
+        let q_arced: Arc<[AudioTrack]> = Arc::from(q);
+        // TODO: safe unwrap
+        self.playback_tx
+            .send(PlaybackEvent::AppendQueue(q_arced.clone()))?;
+
+        let elapsed = now.elapsed().as_millis();
+        info!(elapsed);
+        Ok(q_arced)
     }
 }

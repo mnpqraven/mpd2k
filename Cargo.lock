@@ -1168,6 +1168,7 @@ dependencies = [
  "futures",
  "image",
  "murmur3",
+ "rand",
  "ratatui",
  "ratatui-image",
  "rodio",

@@ -31,8 +31,18 @@ pub struct TuiState {
     pub show_left_sidebar: bool,
     pub image: Arc<Mutex<ImageState>>,
     pub last_album: Option<Arc<str>>,
+    pub key_mode: KeyMode,
     pub key_queue: Vec<KeyCode>,
 }
+
+#[derive(Debug, Default, PartialEq)]
+pub enum KeyMode {
+    #[default]
+    Normal,
+    Multi(Vec<KeyCode>),
+    Editing,
+}
+
 impl Default for TuiState {
     fn default() -> Self {
         Self {
@@ -42,6 +52,7 @@ impl Default for TuiState {
             show_left_sidebar: true,
             image: Default::default(),
             last_album: None,
+            key_mode: Default::default(),
             key_queue: Vec::new(),
         }
     }
@@ -93,6 +104,10 @@ impl<Client: PlayableClient> AppState<Client> {
     /// sets `exit` flag to `true`, only for the map app's while loop
     pub fn exit(&mut self) {
         self.exit = true;
+    }
+
+    pub fn set_keymode(&mut self, key_mode: KeyMode) {
+        self.tui_state.key_mode = key_mode;
     }
 
     /// records the previous keys for multi-key command (can be either modifier

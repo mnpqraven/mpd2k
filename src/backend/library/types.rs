@@ -22,15 +22,30 @@ use super::cache::{try_load_cache, try_load_cache_albums};
 #[derive(Debug)]
 pub struct LibraryClient {
     /// TODO: deprecate
-    // #[deprecated = "use `albums` field instead"]
+    #[deprecated = "use `albums` field instead"]
     pub audio_tracks: Vec<AudioTrack>,
     pub albums: BTreeMap<AlbumMeta, Vec<AudioTrack>>,
     pub current_track: Option<CurrentTrack>,
     pub playback_tx: UnboundedSender<PlaybackEvent>,
+    /// this indicates which context the app is in to handle different case of
+    /// keyboard event
+    pub shuffle: bool,
+    pub repeat: RepeatMode,
     pub volume: f32,
+    /// indicates the loading state of fetching audio tracks and caching if
+    /// using file library
     pub loading: bool,
     pub hashing_rt: Runtime,
 }
+
+#[derive(Debug, Default, Clone, Copy)]
+pub enum RepeatMode {
+    #[default]
+    Off,
+    One,
+    All,
+}
+
 #[derive(Debug)]
 pub struct CurrentTrack {
     pub data: AudioTrack,
@@ -202,6 +217,8 @@ impl LibraryClient {
                 .expect("Creating a tokio runtime on 12 threads"),
             albums: try_load_cache_albums(audio_tracks),
             playback_tx,
+            shuffle: false,
+            repeat: Default::default(),
         }
     }
 

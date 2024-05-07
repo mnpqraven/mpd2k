@@ -1,3 +1,4 @@
+use crate::backend::library::types::RepeatMode;
 use crate::client::PlayableClient;
 use crate::tui::app::AppState;
 use ratatui::{buffer::Buffer, layout::Rect};
@@ -149,9 +150,10 @@ pub fn PlaybackBottom<Client: PlayableClient>(client: &Client, area: Rect, buf: 
     let duration = Line::from(format!("0:00 / {}", duration)).alignment(Alignment::Right);
     let volume = client.volume_percentage();
     let volume = Line::from(format!("{} %", volume)).alignment(Alignment::Right);
-    let status = Line::from(vec![" Rep ".into(), " Loop ".into(), " Upd ".into()])
-        .alignment(Alignment::Right);
+    let status = StatusLine(client).alignment(Alignment::Right);
+
     Paragraph::new(line).render(layout[0], buf);
+
     Paragraph::new(duration)
         .block(
             Block::new()
@@ -159,6 +161,7 @@ pub fn PlaybackBottom<Client: PlayableClient>(client: &Client, area: Rect, buf: 
                 .padding(Padding::horizontal(1)),
         )
         .render(layout[1], buf);
+
     Paragraph::new(volume)
         .block(
             Block::new()
@@ -166,7 +169,27 @@ pub fn PlaybackBottom<Client: PlayableClient>(client: &Client, area: Rect, buf: 
                 .padding(Padding::horizontal(1)),
         )
         .render(layout[2], buf);
+
     Paragraph::new(status).render(layout[3], buf);
+}
+
+#[allow(non_snake_case)]
+fn StatusLine<'a, Client: PlayableClient>(client: &Client) -> Line<'a> {
+    let (rep, shuffle, loading) = (client.get_repeat(), client.get_shuffle(), client.loading());
+    let rep_text: Span = match rep {
+        RepeatMode::Off => Span::raw(" Rep ").fg(Color::DarkGray),
+        RepeatMode::One => Span::raw(" Rep ").fg(Color::LightGreen),
+        RepeatMode::All => Span::raw(" Rep(*) ").fg(Color::LightGreen),
+    };
+    let shuffle_text = match shuffle {
+        true => Span::raw(" Rnd ").fg(Color::LightGreen),
+        false => Span::raw(" Rnd ").fg(Color::DarkGray),
+    };
+    let loading_text = match loading {
+        true => Span::raw(" Upd ").fg(Color::LightGreen),
+        false => Span::raw(" Upd ").fg(Color::DarkGray),
+    };
+    Line::from(vec![rep_text, shuffle_text, loading_text])
 }
 
 fn timestamp(dur: &Option<Duration>) -> String {

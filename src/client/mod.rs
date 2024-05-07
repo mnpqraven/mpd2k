@@ -1,5 +1,5 @@
 use self::events::PlaybackEvent;
-use crate::backend::library::types::{AlbumMeta, AudioTrack, CurrentTrack};
+use crate::backend::library::types::{AlbumMeta, AudioTrack, CurrentTrack, RepeatMode};
 use crate::{error::AppError, tui::app::TuiState};
 use ratatui::widgets::TableState;
 use std::collections::BTreeMap;
@@ -40,6 +40,13 @@ pub trait PlayableClient {
     fn volume_percentage(&self) -> u8;
     fn volume_up(&mut self);
     fn volume_down(&mut self);
+
+    fn generate_random_queue(&self) -> Result<Arc<[AudioTrack]>, AppError>;
+
+    fn get_repeat(&self) -> RepeatMode;
+    fn get_shuffle(&self) -> bool;
+    fn cycle_repeat(&mut self);
+    fn toggle_shuffle(&mut self);
 
     // TODO:
     // stop

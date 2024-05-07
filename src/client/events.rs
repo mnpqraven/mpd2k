@@ -1,4 +1,5 @@
 use crate::backend::library::create_source;
+use crate::backend::library::types::AudioTrack;
 use crate::error::AppError;
 use rodio::{OutputStream, Sink};
 use std::sync::Arc;
@@ -12,7 +13,12 @@ pub enum PlaybackEvent {
     /// this will clear all current queue and start anew, not actually
     ///
     /// playing/resuming, pause state is handled by `PlaybackEvent::Pause`
-    Play(String),
+    /// bool indicates whether or not the sink plays instantly
+    Play(String, bool),
+    /// no action if already playing
+    OnlyPlay,
+    SetQueue(Arc<[AudioTrack]>),
+    AppendQueue(Arc<[AudioTrack]>),
     /// this toggles between play and paused state
     Pause,
     Tick,
@@ -40,6 +46,7 @@ impl SinkArc {
     }
 }
 
+// TODO: need to impl message passing the other way (from this to AppState)
 impl PlaybackServer {
     pub fn new(handle: Handle) -> Self {
         let (sender, receiver) = mpsc::unbounded_channel();
@@ -67,12 +74,15 @@ impl PlaybackServer {
             let sink = self.sink.arced();
 
             match message {
-                PlaybackEvent::Play(path) => {
-                    let source = create_source(path).unwrap();
+                PlaybackEvent::Play(path, should_play) => {
+                    let source = create_source(path)?;
                     sink.clear();
                     sink.append(source);
-                    sink.play();
+                    if should_play {
+                        sink.play();
+                    }
                 }
+                PlaybackEvent::OnlyPlay => sink.play(),
                 PlaybackEvent::Pause => match sink.is_paused() {
                     true => sink.play(),
                     false => sink.pause(),
@@ -85,6 +95,21 @@ impl PlaybackServer {
                     0.05.. => sink.set_volume(sink.volume() - 0.05),
                     _ => sink.set_volume(0.0),
                 },
+                PlaybackEvent::SetQueue(q_arc) => {
+                    sink.clear();
+                    // TODO: perf, reading 20 binaries is very expensive
+                    for track in q_arc.iter() {
+                        let source = create_source(track.path.as_ref())?;
+                        sink.append(source);
+                    }
+                }
+                PlaybackEvent::AppendQueue(q_arc) => {
+                    // TODO: perf, reading 20 binaries is very expensive
+                    for track in q_arc.iter() {
+                        let source = create_source(track.path.as_ref())?;
+                        sink.append(source);
+                    }
+                }
                 _ => {}
             }
         }
