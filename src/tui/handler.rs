@@ -1,22 +1,25 @@
 use super::app::{AppState, KeyMode, NavigationRoute};
-use crate::{client::PlayableClient, error::AppError};
+use crate::{
+    client::{events::PlaybackToAppEvent, PlayableClient},
+    error::AppError,
+};
 use crossterm::event::{KeyCode, KeyEvent};
+use tracing::info;
 
-/// Handles the key events and updates the state of [`AppState`].
-pub fn handle_key_events<Client: PlayableClient>(
-    key_event: KeyEvent,
-    app: &mut AppState<Client>,
-) -> Result<(), AppError> {
-    match app.navigation.current {
-        NavigationRoute::Playback => resolve_key_playback(app, &key_event)?,
-        NavigationRoute::LibraryTree => resolve_key_library_tree(app, &key_event)?,
-        NavigationRoute::Help => resolve_key_help(app, &key_event)?,
-        NavigationRoute::Config => resolve_key_config(app, &key_event)?,
+impl<Client: PlayableClient> AppState<Client> {
+    /// Handles the key events and updates the state of [`AppState`].
+    pub fn handle_key_events(&mut self, key_event: KeyEvent) -> Result<(), AppError> {
+        match self.navigation.current {
+            NavigationRoute::Playback => resolve_key_playback(self, &key_event)?,
+            NavigationRoute::LibraryTree => resolve_key_library_tree(self, &key_event)?,
+            NavigationRoute::Help => resolve_key_help(self, &key_event)?,
+            NavigationRoute::Config => resolve_key_config(self, &key_event)?,
+        }
+
+        resolve_key_universal(self, &key_event)?;
+
+        Ok(())
     }
-
-    resolve_key_universal(app, &key_event)?;
-
-    Ok(())
 }
 
 fn resolve_key_universal<Client: PlayableClient>(

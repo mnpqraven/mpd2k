@@ -1,6 +1,6 @@
 use crate::{
     backend::utils::empty_to_option,
-    client::events::PlaybackEvent,
+    client::events::{AppToPlaybackEvent, PlaybackToAppEvent},
     dotfile::DotfileSchema,
     error::{AppError, LibraryError},
 };
@@ -16,7 +16,7 @@ use std::{
 };
 use tokio::{
     runtime::{Builder, Runtime},
-    sync::mpsc::UnboundedSender,
+    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
 };
 use tracing::info;
 
@@ -32,7 +32,7 @@ pub struct LibraryClient {
     pub audio_tracks: Vec<AudioTrack>,
     pub albums: BTreeMap<AlbumMeta, Vec<AudioTrack>>,
     pub current_track: Option<CurrentTrack>,
-    pub playback_tx: UnboundedSender<PlaybackEvent>,
+    pub playback_tx: UnboundedSender<AppToPlaybackEvent>,
     /// this indicates which context the app is in to handle different case of
     /// keyboard event
     pub shuffle: bool,
@@ -215,10 +215,27 @@ impl AlbumDate {
 }
 
 impl LibraryClient {
-    pub fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
+    // expr
+    pub fn new(// playback_tx: UnboundedSender<AppToPlaybackEvent>,
+        // playback_rx: UnboundedReceiver<PlaybackToAppEvent>,
+    ) -> (Self, UnboundedSender<AppToPlaybackEvent>) {
         let audio_tracks = try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default();
         info!(?audio_tracks);
-        Self {
+        let (tx, mut rx) = mpsc::unbounded_channel::<AppToPlaybackEvent>();
+        let (txx, mut rxx) = mpsc::unbounded_channel::<PlaybackToAppEvent>();
+
+        tokio::spawn(async move {
+            while let Some(message) = rxx.recv().await {
+                match message {
+                    PlaybackToAppEvent::CurrentDuration(_) => {},
+                    PlaybackToAppEvent::Tick => {},
+                }
+            }
+            Ok::<(), AppError>(())
+        });
+
+        // rx + tx + thread spawning here
+        let res = Self {
             audio_tracks: audio_tracks.clone(),
             loading: false,
             volume: 1.0,
@@ -231,10 +248,11 @@ impl LibraryClient {
                 .build()
                 .expect("Creating a tokio runtime on 12 threads"),
             albums: try_load_cache_albums(audio_tracks),
-            playback_tx,
+            playback_tx: tx.clone(),
             shuffle: false,
             repeat: Default::default(),
-        }
+        };
+        (res, tx)
     }
 
     pub fn sort_albums(&mut self) {

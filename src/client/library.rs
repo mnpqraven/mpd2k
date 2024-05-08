@@ -1,10 +1,11 @@
-use super::{events::PlaybackEvent, ClientKind, PlayableClient};
+use super::{
+    events::{AppToPlaybackEvent, PlaybackToAppEvent},
+    ClientKind, PlayableClient,
+};
 use crate::{
     backend::library::{
-        cache::inject_hash,
         create_source,
         expr_mod::{hash_cleanup, load_all_tracks_expr, load_hash_expr},
-        inject_metadata, load_albums, load_all_tracks_raw,
         types::{AlbumMeta, AudioTrack, CurrentTrack, LibraryClient, RepeatMode},
     },
     dotfile::DotfileSchema,
@@ -19,12 +20,14 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tracing::{info, instrument};
 
 impl PlayableClient for LibraryClient {
-    fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
-        Self::new(playback_tx)
+    fn new(// playback_tx: UnboundedSender<AppToPlaybackEvent>,
+        // playback_rx: UnboundedReceiver<PlaybackToAppEvent>,
+    ) -> Self {
+        Self::new().0
     }
 
     #[instrument(skip(self))]
@@ -48,9 +51,9 @@ impl PlayableClient for LibraryClient {
                 (_, true) => {
                     let q = self.generate_random_queue()?;
                     let cmds = [
-                        PlaybackEvent::SetQueue([track].into()),
-                        PlaybackEvent::AppendQueue(q),
-                        PlaybackEvent::Play,
+                        AppToPlaybackEvent::SetQueue([track].into()),
+                        AppToPlaybackEvent::AppendQueue(q),
+                        AppToPlaybackEvent::Play,
                     ];
                     for cmd in cmds {
                         self.playback_tx.send(cmd)?;
@@ -58,9 +61,9 @@ impl PlayableClient for LibraryClient {
                 }
                 (_, false) => {
                     let cmds = [
-                        PlaybackEvent::SetQueue([track].into()),
+                        AppToPlaybackEvent::SetQueue([track].into()),
                         // TODO: queue album by album
-                        PlaybackEvent::Play,
+                        AppToPlaybackEvent::Play,
                     ];
                     for cmd in cmds {
                         self.playback_tx.send(cmd)?;
@@ -145,11 +148,11 @@ impl PlayableClient for LibraryClient {
     }
 
     fn pause_unpause(&self) {
-        let _ = self.playback_tx.send(PlaybackEvent::TogglePause);
+        let _ = self.playback_tx.send(AppToPlaybackEvent::TogglePause);
     }
 
     fn volume_up(&mut self) {
-        let _ = self.playback_tx.send(PlaybackEvent::VolumeUp);
+        let _ = self.playback_tx.send(AppToPlaybackEvent::VolumeUp);
         match self.volume {
             0.95.. => self.volume = 1.0,
             _ => self.volume += 0.05,
@@ -157,7 +160,7 @@ impl PlayableClient for LibraryClient {
     }
 
     fn volume_down(&mut self) {
-        let _ = self.playback_tx.send(PlaybackEvent::VolumeDown);
+        let _ = self.playback_tx.send(AppToPlaybackEvent::VolumeDown);
         match self.volume {
             0.05.. => self.volume -= 0.05,
             _ => self.volume = 0.0,
@@ -267,7 +270,9 @@ impl PlayableClient for LibraryClient {
 
     fn get_play(&self) -> bool {
         // TODO: talk between threads
-        self.playback_tx.send(PlaybackEvent::PlayStatus).unwrap();
+        self.playback_tx
+            .send(AppToPlaybackEvent::PlayStatus)
+            .unwrap();
         true
     }
 }

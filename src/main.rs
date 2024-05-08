@@ -8,15 +8,17 @@ pub mod error;
 pub mod tui;
 
 use backend::library::types::LibraryClient;
-use client::events::{PlaybackEvent, PlaybackServer};
+use client::{
+    events::{AppToPlaybackEvent, PlaybackServer},
+    PlayableClient,
+};
 use dotfile::DotfileSchema;
 use error::AppError;
 use ratatui::{backend::CrosstermBackend, Terminal};
-use tokio::runtime::Builder;
+use tokio::{runtime::Builder, sync::mpsc};
 use tui::{
     app::{self, AppState},
     events::{Event, EventHandler},
-    handler::handle_key_events,
     Tui,
 };
 
@@ -34,11 +36,14 @@ async fn main() -> Result<(), AppError> {
     // PLAYBACK SERVER setup
     let playback_rt = Builder::new_current_thread().build().unwrap();
     let playback_handle = playback_rt.handle().to_owned();
-    let mut playback_server = PlaybackServer::new(playback_handle);
 
-    let playback_tx = playback_server.sender.clone();
-    // NOTE: we can access sink data from global app by passing SinkArc into this
-    let mut app = AppState::<LibraryClient>::new(playback_tx.clone());
+    // let mut app = AppState::<LibraryClient>::new(pb_sender.clone(), app_listener);
+
+    // consume sender
+    let mut playback_server = PlaybackServer::new_expr(playback_handle);
+    let (client, app_send) = LibraryClient::new();
+    let mut app = AppState::from_client(client, playback_server.sender.clone(), app_send);
+
     let backend = CrosstermBackend::new(std::io::stderr());
     let terminal = Terminal::new(backend)?;
 
@@ -55,17 +60,14 @@ async fn main() -> Result<(), AppError> {
         tui.draw(&app)?;
 
         match tui.events.next().await? {
-            Event::Tick => {
-                app.tick();
-                let _ = playback_tx.send(PlaybackEvent::Tick);
-            }
-            Event::Key(key_event) => handle_key_events(key_event, &mut app)?,
+            Event::Tick => app.tick()?,
+            Event::Key(key_event) => app.handle_key_events(key_event)?,
             Event::Mouse(_) => {}
             Event::Resize(_, _) => {}
         }
 
-        // playback_server.handle(&mut app).await?;
         playback_server.handle_events()?;
+        app.handle_playback_events()?;
     }
 
     // STDOUT CLEANUP

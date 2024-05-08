@@ -1,6 +1,8 @@
 use super::render::image::ImageState;
+use crate::client::events::PlaybackToAppEvent;
 use crate::client::PlayableClient;
-use crate::client::{events::PlaybackEvent, PlaybackClient};
+use crate::client::{events::AppToPlaybackEvent, PlaybackClient};
+use crate::error::AppError;
 use crossterm::{
     event::KeyCode,
     execute,
@@ -13,7 +15,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use strum::{Display, EnumIter};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 #[derive(Debug)]
 pub struct AppState<Client: PlayableClient> {
@@ -89,17 +91,31 @@ pub fn teardown() -> io::Result<()> {
 impl<Client: PlayableClient> AppState<Client> {
     // TODO: generic refactor
     // TODO: doc
-    pub fn new(playback_tx: UnboundedSender<PlaybackEvent>) -> Self {
+    pub fn new(
+        tx: UnboundedSender<AppToPlaybackEvent>,
+        rx: UnboundedReceiver<PlaybackToAppEvent>,
+    ) -> Self {
         Self {
             navigation: NavigationState::default(),
             tui_state: Default::default(),
-            client: PlaybackClient::new(playback_tx),
+            client: PlaybackClient::new(),
             exit: false,
         }
     }
 
+    pub fn from_client(
+        client: Client,
+        pb_send: UnboundedSender<AppToPlaybackEvent>,
+        app_send: UnboundedSender<AppToPlaybackEvent>,
+    ) -> Self {
+        todo!()
+    }
+
     /// noop
-    pub fn tick(&self) {}
+    pub fn tick(&self) -> Result<(), AppError> {
+        self.client.sender.send(AppToPlaybackEvent::Tick)?;
+        Ok(())
+    }
 
     /// sets `exit` flag to `true`, only for the map app's while loop
     pub fn exit(&mut self) {
