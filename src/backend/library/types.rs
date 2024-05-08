@@ -218,7 +218,7 @@ impl LibraryClient {
     // expr
     pub fn new(// playback_tx: UnboundedSender<AppToPlaybackEvent>,
         // playback_rx: UnboundedReceiver<PlaybackToAppEvent>,
-    ) -> (Self, UnboundedSender<AppToPlaybackEvent>) {
+    ) -> (Self, UnboundedSender<PlaybackToAppEvent>) {
         let audio_tracks = try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default();
         info!(?audio_tracks);
         let (tx, mut rx) = mpsc::unbounded_channel::<AppToPlaybackEvent>();
@@ -252,7 +252,7 @@ impl LibraryClient {
             shuffle: false,
             repeat: Default::default(),
         };
-        (res, tx)
+        (res, txx)
     }
 
     pub fn sort_albums(&mut self) {

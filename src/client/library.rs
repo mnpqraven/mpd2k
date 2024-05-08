@@ -270,9 +270,9 @@ impl PlayableClient for LibraryClient {
 
     fn get_play(&self) -> bool {
         // TODO: talk between threads
-        self.playback_tx
-            .send(AppToPlaybackEvent::PlayStatus)
-            .unwrap();
+        // self.playback_tx
+        //     .send(AppToPlaybackEvent::PlayStatus)
+        //     .unwrap();
         true
     }
 }

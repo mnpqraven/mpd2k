@@ -40,7 +40,7 @@ async fn main() -> Result<(), AppError> {
     // let mut app = AppState::<LibraryClient>::new(pb_sender.clone(), app_listener);
 
     // consume sender
-    let mut playback_server = PlaybackServer::new_expr(playback_handle);
+    let playback_server = PlaybackServer::new_expr(playback_handle);
     let (client, app_send) = LibraryClient::new();
     let mut app = AppState::from_client(client, playback_server.sender.clone(), app_send);
 
@@ -65,9 +65,6 @@ async fn main() -> Result<(), AppError> {
             Event::Mouse(_) => {}
             Event::Resize(_, _) => {}
         }
-
-        playback_server.handle_events()?;
-        app.handle_playback_events()?;
     }
 
     // STDOUT CLEANUP

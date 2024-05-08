@@ -21,6 +21,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 pub struct AppState<Client: PlayableClient> {
     pub navigation: NavigationState,
     pub client: PlaybackClient<Client>,
+    pub pb_server: UnboundedSender<AppToPlaybackEvent>,
+    pub pb_client: UnboundedSender<PlaybackToAppEvent>,
     pub tui_state: TuiState,
     pub exit: bool,
 }
@@ -95,25 +97,32 @@ impl<Client: PlayableClient> AppState<Client> {
         tx: UnboundedSender<AppToPlaybackEvent>,
         rx: UnboundedReceiver<PlaybackToAppEvent>,
     ) -> Self {
-        Self {
-            navigation: NavigationState::default(),
-            tui_state: Default::default(),
-            client: PlaybackClient::new(),
-            exit: false,
-        }
+        todo!()
+        // Self {
+        //     navigation: NavigationState::default(),
+        //     tui_state: Default::default(),
+        //     client: PlaybackClient::new(),
+        //     exit: false,
+        // }
     }
 
     pub fn from_client(
         client: Client,
         pb_send: UnboundedSender<AppToPlaybackEvent>,
-        app_send: UnboundedSender<AppToPlaybackEvent>,
+        app_send: UnboundedSender<PlaybackToAppEvent>,
     ) -> Self {
-        todo!()
+        Self {
+            navigation: NavigationState::default(),
+            tui_state: Default::default(),
+            client: PlaybackClient::from_client(client),
+            exit: false,
+            pb_server: pb_send,
+            pb_client: app_send,
+        }
     }
 
     /// noop
     pub fn tick(&self) -> Result<(), AppError> {
-        self.client.sender.send(AppToPlaybackEvent::Tick)?;
         Ok(())
     }
 

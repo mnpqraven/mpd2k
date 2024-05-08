@@ -86,6 +86,12 @@ where
         }
     }
 
+    pub fn from_client(client: Client) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(client)),
+        }
+    }
+
     /// lock of the playback client
     /// this function blocks until the lock is free
     pub fn get(&self) -> LockResult<MutexGuard<'_, Client>> {
