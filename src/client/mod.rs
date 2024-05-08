@@ -43,6 +43,7 @@ pub trait PlayableClient {
 
     fn generate_random_queue(&self) -> Result<Arc<[AudioTrack]>, AppError>;
 
+    fn get_play(&self) -> bool;
     fn get_repeat(&self) -> RepeatMode;
     fn get_shuffle(&self) -> bool;
     fn cycle_repeat(&mut self);

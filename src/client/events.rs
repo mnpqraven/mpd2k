@@ -20,6 +20,9 @@ pub enum PlaybackEvent {
     Play,
     /// this toggles between play and paused state
     TogglePause,
+    /// the play/pause status of the sink
+    /// `true` denotes track is playing
+    PlayStatus,
     Tick,
     VolumeUp,
     VolumeDown,

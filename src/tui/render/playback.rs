@@ -123,9 +123,15 @@ pub fn PlaybackBottom<Client: PlayableClient>(client: &Client, area: Rect, buf: 
     let layout = Layout::new(
         Direction::Horizontal,
         [
+            // seekbar
             Constraint::Min(10),
+            // play symbol
+            Constraint::Length(2),
+            // length
             Constraint::Length(17),
+            // volume
             Constraint::Length(8),
+            // toggles
             Constraint::Max(20),
         ],
     )
@@ -152,7 +158,16 @@ pub fn PlaybackBottom<Client: PlayableClient>(client: &Client, area: Rect, buf: 
     let volume = Line::from(format!("{} %", volume)).alignment(Alignment::Right);
     let status = StatusLine(client).alignment(Alignment::Right);
 
-    Paragraph::new(line).render(layout[0], buf);
+    let play_symbol = match client.get_play() {
+        true => "|>",
+        false => "||",
+    };
+
+    Paragraph::new(line)
+        .block(Block::new().borders(Borders::LEFT | Borders::RIGHT))
+        .render(layout[0], buf);
+
+    Paragraph::new(Line::from(play_symbol)).render(layout[1], buf);
 
     Paragraph::new(duration)
         .block(
@@ -160,7 +175,7 @@ pub fn PlaybackBottom<Client: PlayableClient>(client: &Client, area: Rect, buf: 
                 .borders(Borders::LEFT | Borders::RIGHT)
                 .padding(Padding::horizontal(1)),
         )
-        .render(layout[1], buf);
+        .render(layout[2], buf);
 
     Paragraph::new(volume)
         .block(
@@ -168,9 +183,9 @@ pub fn PlaybackBottom<Client: PlayableClient>(client: &Client, area: Rect, buf: 
                 .borders(Borders::RIGHT)
                 .padding(Padding::horizontal(1)),
         )
-        .render(layout[2], buf);
+        .render(layout[3], buf);
 
-    Paragraph::new(status).render(layout[3], buf);
+    Paragraph::new(status).render(layout[4], buf);
 }
 
 #[allow(non_snake_case)]

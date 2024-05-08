@@ -3,7 +3,7 @@ use crate::{
     backend::library::{
         cache::inject_hash,
         create_source,
-        expr_mod::{load_all_tracks_expr, load_hash_expr},
+        expr_mod::{hash_cleanup, load_all_tracks_expr, load_hash_expr},
         inject_metadata, load_albums, load_all_tracks_raw,
         types::{AlbumMeta, AudioTrack, CurrentTrack, LibraryClient, RepeatMode},
     },
@@ -178,7 +178,7 @@ impl PlayableClient for LibraryClient {
 
     /// TODO: impl hash compare
     /// track list also need hash sort and dedup
-    fn update_lib(&mut self, self_arc: Option<Arc<Mutex<LibraryClient>>>, hard_update: bool) {
+    fn update_lib(&mut self, self_arc: Option<Arc<Mutex<LibraryClient>>>, _hard_update: bool) {
         if let Some(self_arc) = self_arc
             && !self.loading
         {
@@ -199,16 +199,12 @@ impl PlayableClient for LibraryClient {
                 }
 
                 // NEW CODE USING LOADING THEN ADDING TO ALBUM BTREE
-                load_all_tracks_expr(
-                    &lib_root,
-                    self_arc.clone(),
-                    &hash_handle.clone(),
-                    hard_update,
-                )
-                .await?;
+                load_all_tracks_expr(&lib_root, self_arc.clone(), &hash_handle.clone()).await?;
                 load_hash_expr(self_arc.clone(), &hash_handle.clone()).await?;
+                hash_cleanup(self_arc.clone())?;
 
                 if let Ok(mut lib) = self_arc.lock() {
+                    // TODO: check for index drift
                     lib.set_loading(false);
                 }
 
@@ -267,5 +263,11 @@ impl PlayableClient for LibraryClient {
         let elapsed = now.elapsed().as_millis();
         info!(elapsed);
         Ok(q_arced)
+    }
+
+    fn get_play(&self) -> bool {
+        // TODO: talk between threads
+        self.playback_tx.send(PlaybackEvent::PlayStatus).unwrap();
+        true
     }
 }

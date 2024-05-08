@@ -14,8 +14,7 @@ pub async fn load_all_tracks_expr<P: AsRef<Path> + Debug>(
     lib_root: P,
     lib_arc: Arc<Mutex<LibraryClient>>,
     handle: &Handle,
-    // TODO: impl
-    _hard_update: bool,
+    // TODO: impl hard_update
 ) -> Result<(), AppError> {
     let library_tree = WalkDir::new(lib_root).follow_links(true);
 
@@ -109,5 +108,16 @@ pub async fn load_hash_expr(
         }
     }
 
+    Ok(())
+}
+
+/// clean up duplicate tracks with the same hash
+pub fn hash_cleanup(lib_arc: Arc<Mutex<LibraryClient>>) -> Result<(), AppError> {
+    let mut lib = lib_arc.lock()?;
+    for tracks in lib.albums.values_mut() {
+        tracks.sort_unstable_by(|a, b| a.binary_hash.cmp(&b.binary_hash));
+        tracks.dedup_by(|a, b| a.binary_hash == b.binary_hash);
+        tracks.sort();
+    }
     Ok(())
 }

@@ -94,7 +94,7 @@ impl<Client: PlayableClient> AppState<Client> {
             navigation: NavigationState::default(),
             tui_state: Default::default(),
             client: PlaybackClient::new(playback_tx),
-            exit: bool::default(),
+            exit: false,
         }
     }
 
