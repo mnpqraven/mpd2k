@@ -34,15 +34,13 @@ async fn main() -> Result<(), AppError> {
         .init();
 
     // PLAYBACK SERVER setup
-    let playback_rt = Builder::new_current_thread().build().unwrap();
-    let playback_handle = playback_rt.handle().to_owned();
 
     // let mut app = AppState::<LibraryClient>::new(pb_sender.clone(), app_listener);
 
     // consume sender
-    let playback_server = PlaybackServer::new_expr(playback_handle);
-    let (client, app_send) = LibraryClient::new();
-    let mut app = AppState::from_client(client, playback_server.sender.clone(), app_send);
+    let (playback_server, playback_send) = PlaybackServer::new_expr();
+    let (client, app_send) = LibraryClient::new(playback_send.clone());
+    let mut app = AppState::from_client(client, playback_send, app_send);
 
     let backend = CrosstermBackend::new(std::io::stderr());
     let terminal = Terminal::new(backend)?;
@@ -69,7 +67,6 @@ async fn main() -> Result<(), AppError> {
 
     // STDOUT CLEANUP
     app.client.teardown()?;
-    playback_rt.shutdown_background();
     app::teardown()?;
 
     Ok(())

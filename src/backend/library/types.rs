@@ -216,19 +216,19 @@ impl AlbumDate {
 
 impl LibraryClient {
     // expr
-    pub fn new(// playback_tx: UnboundedSender<AppToPlaybackEvent>,
+    pub fn new(
+        playback_tx: UnboundedSender<AppToPlaybackEvent>,
         // playback_rx: UnboundedReceiver<PlaybackToAppEvent>,
     ) -> (Self, UnboundedSender<PlaybackToAppEvent>) {
         let audio_tracks = try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default();
         info!(?audio_tracks);
-        let (tx, mut rx) = mpsc::unbounded_channel::<AppToPlaybackEvent>();
         let (txx, mut rxx) = mpsc::unbounded_channel::<PlaybackToAppEvent>();
 
         tokio::spawn(async move {
             while let Some(message) = rxx.recv().await {
                 match message {
-                    PlaybackToAppEvent::CurrentDuration(_) => {},
-                    PlaybackToAppEvent::Tick => {},
+                    PlaybackToAppEvent::CurrentDuration(_) => {}
+                    PlaybackToAppEvent::Tick => {}
                 }
             }
             Ok::<(), AppError>(())
@@ -248,7 +248,7 @@ impl LibraryClient {
                 .build()
                 .expect("Creating a tokio runtime on 12 threads"),
             albums: try_load_cache_albums(audio_tracks),
-            playback_tx: tx.clone(),
+            playback_tx,
             shuffle: false,
             repeat: Default::default(),
         };

@@ -16,7 +16,9 @@ pub enum ClientKind {
 }
 
 pub trait PlayableClient {
-    fn new(// playback_tx: UnboundedSender<AppToPlaybackEvent>,
+    fn new(
+        playback_tx: UnboundedSender<AppToPlaybackEvent>,
+        // playback_tx: UnboundedSender<AppToPlaybackEvent>,
         // playback_rx: UnboundedReceiver<PlaybackToAppEvent>,
     ) -> Self;
     fn play(&mut self, table_state: &TableState) -> Result<(), AppError>;
@@ -73,12 +75,11 @@ impl<Client> PlaybackClient<Client>
 where
     Client: PlayableClient,
 {
-    pub fn new(// playback_tx: UnboundedSender<AppToPlaybackEvent>,
+    pub fn new(
+        playback_tx: UnboundedSender<AppToPlaybackEvent>,
         // playback_rx: UnboundedReceiver<PlaybackToAppEvent>,
     ) -> Self {
-        let inner = Arc::new(Mutex::new(Client::new(
-            // playback_tx.clone(),  playback_rx
-        )));
+        let inner = Arc::new(Mutex::new(Client::new(playback_tx)));
         Self {
             inner,
             // sender: playback_tx,

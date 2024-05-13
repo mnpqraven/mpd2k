@@ -91,21 +91,6 @@ pub fn teardown() -> io::Result<()> {
 }
 
 impl<Client: PlayableClient> AppState<Client> {
-    // TODO: generic refactor
-    // TODO: doc
-    pub fn new(
-        tx: UnboundedSender<AppToPlaybackEvent>,
-        rx: UnboundedReceiver<PlaybackToAppEvent>,
-    ) -> Self {
-        todo!()
-        // Self {
-        //     navigation: NavigationState::default(),
-        //     tui_state: Default::default(),
-        //     client: PlaybackClient::new(),
-        //     exit: false,
-        // }
-    }
-
     pub fn from_client(
         client: Client,
         pb_send: UnboundedSender<AppToPlaybackEvent>,

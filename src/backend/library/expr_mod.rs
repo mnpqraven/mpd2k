@@ -6,7 +6,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::{runtime::Handle, task::JoinSet};
-use tracing::{error, instrument};
+use tracing::{error, info, instrument};
 use walkdir::WalkDir;
 
 #[instrument]
@@ -66,6 +66,7 @@ pub async fn load_hash_expr(
     handle: &Handle,
 ) -> Result<(), AppError> {
     let arc_outer = lib_arc.clone();
+    info!("locking");
     let all: Vec<(AlbumMeta, Vec<Arc<str>>)> = arc_outer.lock().map(|lib| {
         lib.albums()
             .iter()
@@ -78,6 +79,7 @@ pub async fn load_hash_expr(
             })
             .collect()
     })?;
+    info!("unlocking");
 
     let mut join_set = JoinSet::new();
 
@@ -98,6 +100,10 @@ pub async fn load_hash_expr(
 
     while let Some(Ok(t)) = join_set.join_next().await {
         let (meta, path, hash) = t?;
+        let meta_ref = meta.as_ref().to_owned();
+        let p = path.to_string();
+        info!(?meta_ref, p, hash);
+        info!("locking");
         let mut lib = lib_arc.lock()?;
         if let Some(tracks) = lib.albums.get_mut(&meta) {
             for track in tracks {
@@ -106,6 +112,7 @@ pub async fn load_hash_expr(
                 }
             }
         }
+        info!("unlocking");
     }
 
     Ok(())

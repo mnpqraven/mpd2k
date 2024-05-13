@@ -45,7 +45,7 @@ pub struct PlaybackServer {
     /// Global sink that manages playback
     pub sink: SinkArc,
     pub stream: OutputStream,
-    pub handle: Handle,
+    // pub handle: Handle,
 }
 
 pub struct SinkArc(pub Arc<Sink>);
@@ -57,87 +57,28 @@ impl SinkArc {
 
 // TODO: need to impl message passing the other way (from this to AppState)
 impl PlaybackServer {
-    pub fn new_expr(handle: Handle) -> Self {
+    pub fn new_expr() -> (Self, mpsc::UnboundedSender<AppToPlaybackEvent>) {
         let (stream, stream_handle) = OutputStream::try_default().unwrap();
         let sink = Arc::new(Sink::try_new(&stream_handle).unwrap());
         let sink = SinkArc(sink);
         let sink_for_thread = sink.arced();
         let (tx, mut rx) = mpsc::unbounded_channel::<AppToPlaybackEvent>();
 
-        handle.spawn(async move {
+        tokio::spawn(async move {
             while let Some(message) = rx.recv().await {
                 let sink = sink_for_thread.clone();
-                if message != AppToPlaybackEvent::PlayStatus && message != AppToPlaybackEvent::Tick
-                {
-                    info!(?message);
-                }
-
-                match message {
-                    AppToPlaybackEvent::Play => sink.play(),
-                    AppToPlaybackEvent::TogglePause => match sink.is_paused() {
-                        true => sink.play(),
-                        false => sink.pause(),
-                    },
-                    AppToPlaybackEvent::VolumeUp => {
-                        // TODO: works but bad practice, create a different init block instead
-                        // self.sender
-                        //     .send(PlaybackToAppEvent::CurrentDuration(1000))?;
-
-                        match sink.volume() {
-                            0.95.. => sink.set_volume(1.0),
-                            _ => sink.set_volume(sink.volume() + 0.05),
-                        }
-                    }
-                    AppToPlaybackEvent::VolumeDown => match sink.volume() {
-                        0.05.. => sink.set_volume(sink.volume() - 0.05),
-                        _ => sink.set_volume(0.0),
-                    },
-                    AppToPlaybackEvent::SetQueue(q_arc) => {
-                        sink.clear();
-                        // TODO: perf, reading 20 binaries is very expensive
-                        for track in q_arc.iter() {
-                            let source = create_source(track.path.as_ref())?;
-                            sink.append(source);
-                        }
-                    }
-                    AppToPlaybackEvent::AppendQueue(q_arc) => {
-                        // TODO: perf, reading 20 binaries is very expensive
-                        for track in q_arc.iter() {
-                            let source = create_source(track.path.as_ref())?;
-                            sink.append(source);
-                        }
-                    }
-                    _ => {}
-                }
+                handle_message(sink, message)?;
             }
             Ok::<(), AppError>(())
         });
 
-        Self {
-            sender: tx,
-            // receiver,
+        let res = Self {
+            sender: tx.clone(),
             sink,
             stream,
-            handle,
-        }
+        };
+        (res, tx)
     }
-
-    // pub fn new(
-    //     handle: Handle,
-    //     sender: UnboundedSender<PlaybackToAppEvent>,
-    //     receiver: mpsc::UnboundedReceiver<AppToPlaybackEvent>,
-    // ) -> Self {
-    //     let (stream, stream_handle) = OutputStream::try_default().unwrap();
-    //     let sink = Arc::new(Sink::try_new(&stream_handle).unwrap());
-    //     let sink = SinkArc(sink);
-    //     Self {
-    //         sender,
-    //         receiver,
-    //         sink,
-    //         stream,
-    //         handle,
-    //     }
-    // }
 
     /// run the audio thread, this should return tick command instead of
     /// blocking the main thread
@@ -195,4 +136,44 @@ impl PlaybackServer {
 
         Ok(())
     }
+}
+
+fn handle_message(sink: Arc<Sink>, message: AppToPlaybackEvent) -> Result<(), AppError> {
+    let filter = [AppToPlaybackEvent::PlayStatus, AppToPlaybackEvent::Tick];
+    if filter.into_iter().all(|e| e != message) {
+        info!(?message);
+    }
+
+    match message {
+        AppToPlaybackEvent::Play => sink.play(),
+        AppToPlaybackEvent::TogglePause => match sink.is_paused() {
+            true => sink.play(),
+            false => sink.pause(),
+        },
+        AppToPlaybackEvent::VolumeUp => match sink.volume() {
+            0.95.. => sink.set_volume(1.0),
+            _ => sink.set_volume(sink.volume() + 0.05),
+        },
+        AppToPlaybackEvent::VolumeDown => match sink.volume() {
+            0.05.. => sink.set_volume(sink.volume() - 0.05),
+            _ => sink.set_volume(0.0),
+        },
+        AppToPlaybackEvent::SetQueue(q_arc) => {
+            sink.clear();
+            // TODO: perf, reading 20 binaries is very expensive
+            for track in q_arc.iter() {
+                let source = create_source(track.path.as_ref())?;
+                sink.append(source);
+            }
+        }
+        AppToPlaybackEvent::AppendQueue(q_arc) => {
+            // TODO: perf, reading 20 binaries is very expensive
+            for track in q_arc.iter() {
+                let source = create_source(track.path.as_ref())?;
+                sink.append(source);
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }

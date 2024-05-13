@@ -20,14 +20,18 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::{
+    mpsc::{self, UnboundedReceiver, UnboundedSender},
+    oneshot,
+};
 use tracing::{info, instrument};
 
 impl PlayableClient for LibraryClient {
-    fn new(// playback_tx: UnboundedSender<AppToPlaybackEvent>,
+    fn new(
+        playback_tx: UnboundedSender<AppToPlaybackEvent>,
         // playback_rx: UnboundedReceiver<PlaybackToAppEvent>,
     ) -> Self {
-        Self::new().0
+        Self::new(playback_tx).0
     }
 
     #[instrument(skip(self))]
@@ -160,7 +164,13 @@ impl PlayableClient for LibraryClient {
     }
 
     fn volume_down(&mut self) {
-        let _ = self.playback_tx.send(AppToPlaybackEvent::VolumeDown);
+        // FIX: ERR here
+        match self.playback_tx.send(AppToPlaybackEvent::VolumeDown) {
+            Ok(_) => {}
+            Err(e) => {
+                info!(?e);
+            }
+        }
         match self.volume {
             0.05.. => self.volume -= 0.05,
             _ => self.volume = 0.0,
@@ -188,6 +198,10 @@ impl PlayableClient for LibraryClient {
             self.set_loading(true);
             let handle = self.hashing_rt.handle();
             let hash_handle = handle.clone();
+            let hash_handle_2nd = handle.clone();
+            let self_arc_2nd = self_arc.clone();
+
+            let (tx, mut rx) = oneshot::channel();
 
             self.hashing_rt.spawn(async move {
                 let now = Instant::now();
@@ -203,8 +217,6 @@ impl PlayableClient for LibraryClient {
 
                 // NEW CODE USING LOADING THEN ADDING TO ALBUM BTREE
                 load_all_tracks_expr(&lib_root, self_arc.clone(), &hash_handle.clone()).await?;
-                load_hash_expr(self_arc.clone(), &hash_handle.clone()).await?;
-                hash_cleanup(self_arc.clone())?;
 
                 if let Ok(mut lib) = self_arc.lock() {
                     // TODO: check for index drift
@@ -212,7 +224,23 @@ impl PlayableClient for LibraryClient {
                 }
 
                 let elapsed = now.elapsed().as_millis();
+                if tx.send(true).is_err() {
+                    info!("oneshot channel dropped");
+                }
                 info!("hashing_rt total load: {elapsed} s");
+                Ok::<(), AppError>(())
+            });
+
+            // FIX: this cause blocking and delay the play message sent to sink
+            // just that the message is very delayed during hashing/updating
+            self.hashing_rt.spawn(async move {
+                info!("inside 2nd hashing thread");
+                if let Ok(true) = rx.await {
+                    info!("begin hashing update");
+                    // FIX: this blocks playback state
+                    load_hash_expr(self_arc_2nd.clone(), &hash_handle_2nd.clone()).await?;
+                    hash_cleanup(self_arc_2nd.clone())?;
+                }
                 Ok::<(), AppError>(())
             });
         }
