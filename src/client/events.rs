@@ -3,8 +3,7 @@ use crate::backend::library::types::AudioTrack;
 use crate::error::AppError;
 use rodio::{OutputStream, Sink};
 use std::sync::Arc;
-use tokio::runtime::Handle;
-use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::info;
 
 #[derive(Debug, PartialEq)]
@@ -27,6 +26,8 @@ pub enum AppToPlaybackEvent {
     Tick,
     VolumeUp,
     VolumeDown,
+
+    RequestDuration,
 }
 
 #[derive(Debug)]
@@ -45,7 +46,7 @@ pub struct PlaybackServer {
     /// Global sink that manages playback
     pub sink: SinkArc,
     pub stream: OutputStream,
-    // pub handle: Handle,
+    pub app_tx: UnboundedSender<PlaybackToAppEvent>,
 }
 
 pub struct SinkArc(pub Arc<Sink>);
@@ -57,17 +58,22 @@ impl SinkArc {
 
 // TODO: need to impl message passing the other way (from this to AppState)
 impl PlaybackServer {
-    pub fn new_expr() -> (Self, mpsc::UnboundedSender<AppToPlaybackEvent>) {
+    pub fn new_expr(
+        tx: UnboundedSender<AppToPlaybackEvent>,
+        mut rx: UnboundedReceiver<AppToPlaybackEvent>,
+        app_tx: UnboundedSender<PlaybackToAppEvent>,
+    ) -> (Self, mpsc::UnboundedSender<AppToPlaybackEvent>) {
         let (stream, stream_handle) = OutputStream::try_default().unwrap();
         let sink = Arc::new(Sink::try_new(&stream_handle).unwrap());
         let sink = SinkArc(sink);
         let sink_for_thread = sink.arced();
-        let (tx, mut rx) = mpsc::unbounded_channel::<AppToPlaybackEvent>();
+        // let (tx, mut rx) = mpsc::unbounded_channel::<AppToPlaybackEvent>();
 
+        let tx_inner = app_tx.clone();
         tokio::spawn(async move {
             while let Some(message) = rx.recv().await {
                 let sink = sink_for_thread.clone();
-                handle_message(sink, message)?;
+                handle_message(sink, message, tx_inner.clone())?;
             }
             Ok::<(), AppError>(())
         });
@@ -76,6 +82,7 @@ impl PlaybackServer {
             sender: tx.clone(),
             sink,
             stream,
+            app_tx,
         };
         (res, tx)
     }
@@ -138,7 +145,11 @@ impl PlaybackServer {
     }
 }
 
-fn handle_message(sink: Arc<Sink>, message: AppToPlaybackEvent) -> Result<(), AppError> {
+fn handle_message(
+    sink: Arc<Sink>,
+    message: AppToPlaybackEvent,
+    tx: UnboundedSender<PlaybackToAppEvent>,
+) -> Result<(), AppError> {
     let filter = [AppToPlaybackEvent::PlayStatus, AppToPlaybackEvent::Tick];
     if filter.into_iter().all(|e| e != message) {
         info!(?message);
@@ -172,6 +183,10 @@ fn handle_message(sink: Arc<Sink>, message: AppToPlaybackEvent) -> Result<(), Ap
                 let source = create_source(track.path.as_ref())?;
                 sink.append(source);
             }
+        }
+        AppToPlaybackEvent::RequestDuration => {
+            tx.send(PlaybackToAppEvent::CurrentDuration(42))?;
+            // 42 (send)
         }
         _ => {}
     }

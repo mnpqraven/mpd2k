@@ -9,7 +9,7 @@ pub mod tui;
 
 use backend::library::types::LibraryClient;
 use client::{
-    events::{AppToPlaybackEvent, PlaybackServer},
+    events::{AppToPlaybackEvent, PlaybackServer, PlaybackToAppEvent},
     PlayableClient,
 };
 use dotfile::DotfileSchema;
@@ -38,8 +38,12 @@ async fn main() -> Result<(), AppError> {
     // let mut app = AppState::<LibraryClient>::new(pb_sender.clone(), app_listener);
 
     // consume sender
-    let (playback_server, playback_send) = PlaybackServer::new_expr();
-    let (client, app_send) = LibraryClient::new(playback_send.clone());
+    let (pb_tx, pb_rx) = mpsc::unbounded_channel::<AppToPlaybackEvent>();
+    let (app_tx, app_rx) = mpsc::unbounded_channel::<PlaybackToAppEvent>();
+
+    let (_playback_server, playback_send) = PlaybackServer::new_expr(pb_tx, pb_rx, app_tx.clone());
+    let (client, app_send) = LibraryClient::new(app_tx, app_rx, playback_send.clone());
+
     let mut app = AppState::from_client(client, playback_send, app_send);
 
     let backend = CrosstermBackend::new(std::io::stderr());

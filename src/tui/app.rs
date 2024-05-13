@@ -15,7 +15,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use strum::{Display, EnumIter};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
 
 #[derive(Debug)]
 pub struct AppState<Client: PlayableClient> {

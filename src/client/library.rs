@@ -21,17 +21,18 @@ use std::{
     time::Instant,
 };
 use tokio::sync::{
-    mpsc::{self, UnboundedReceiver, UnboundedSender},
+    mpsc::{UnboundedReceiver, UnboundedSender},
     oneshot,
 };
 use tracing::{info, instrument};
 
 impl PlayableClient for LibraryClient {
     fn new(
+        app_tx: UnboundedSender<PlaybackToAppEvent>,
+        app_rx: UnboundedReceiver<PlaybackToAppEvent>,
         playback_tx: UnboundedSender<AppToPlaybackEvent>,
-        // playback_rx: UnboundedReceiver<PlaybackToAppEvent>,
     ) -> Self {
-        Self::new(playback_tx).0
+        Self::new(app_tx, app_rx, playback_tx).0
     }
 
     #[instrument(skip(self))]
@@ -201,7 +202,7 @@ impl PlayableClient for LibraryClient {
             let hash_handle_2nd = handle.clone();
             let self_arc_2nd = self_arc.clone();
 
-            let (tx, mut rx) = oneshot::channel();
+            let (tx, rx) = oneshot::channel();
 
             self.hashing_rt.spawn(async move {
                 let now = Instant::now();
@@ -302,5 +303,11 @@ impl PlayableClient for LibraryClient {
         //     .send(AppToPlaybackEvent::PlayStatus)
         //     .unwrap();
         true
+    }
+
+    fn duration(&mut self) {
+        let r = self.playback_tx.send(AppToPlaybackEvent::RequestDuration);
+        let duration_request_send = r.is_ok();
+        info!(duration_request_send)
     }
 }

@@ -217,17 +217,19 @@ impl AlbumDate {
 impl LibraryClient {
     // expr
     pub fn new(
+        app_tx: UnboundedSender<PlaybackToAppEvent>,
+        mut app_rx: UnboundedReceiver<PlaybackToAppEvent>,
         playback_tx: UnboundedSender<AppToPlaybackEvent>,
-        // playback_rx: UnboundedReceiver<PlaybackToAppEvent>,
     ) -> (Self, UnboundedSender<PlaybackToAppEvent>) {
         let audio_tracks = try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default();
         info!(?audio_tracks);
-        let (txx, mut rxx) = mpsc::unbounded_channel::<PlaybackToAppEvent>();
 
         tokio::spawn(async move {
-            while let Some(message) = rxx.recv().await {
+            while let Some(message) = app_rx.recv().await {
                 match message {
-                    PlaybackToAppEvent::CurrentDuration(_) => {}
+                    PlaybackToAppEvent::CurrentDuration(num) => {
+                        info!("from lib thread {}", num);
+                    }
                     PlaybackToAppEvent::Tick => {}
                 }
             }
@@ -252,7 +254,7 @@ impl LibraryClient {
             shuffle: false,
             repeat: Default::default(),
         };
-        (res, txx)
+        (res, app_tx)
     }
 
     pub fn sort_albums(&mut self) {

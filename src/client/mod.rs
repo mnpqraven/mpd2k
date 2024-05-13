@@ -17,9 +17,9 @@ pub enum ClientKind {
 
 pub trait PlayableClient {
     fn new(
+        app_tx: UnboundedSender<PlaybackToAppEvent>,
+        app_rx: UnboundedReceiver<PlaybackToAppEvent>,
         playback_tx: UnboundedSender<AppToPlaybackEvent>,
-        // playback_tx: UnboundedSender<AppToPlaybackEvent>,
-        // playback_rx: UnboundedReceiver<PlaybackToAppEvent>,
     ) -> Self;
     fn play(&mut self, table_state: &TableState) -> Result<(), AppError>;
 
@@ -53,6 +53,7 @@ pub trait PlayableClient {
     fn cycle_repeat(&mut self);
     fn toggle_shuffle(&mut self);
 
+    fn duration(&mut self);
     // TODO:
     // stop
     // queue next
@@ -76,15 +77,12 @@ where
     Client: PlayableClient,
 {
     pub fn new(
+        app_tx: UnboundedSender<PlaybackToAppEvent>,
+        app_rx: UnboundedReceiver<PlaybackToAppEvent>,
         playback_tx: UnboundedSender<AppToPlaybackEvent>,
-        // playback_rx: UnboundedReceiver<PlaybackToAppEvent>,
     ) -> Self {
-        let inner = Arc::new(Mutex::new(Client::new(playback_tx)));
-        Self {
-            inner,
-            // sender: playback_tx,
-            // receiver: playback_rx,
-        }
+        let inner = Arc::new(Mutex::new(Client::new(app_tx, app_rx, playback_tx)));
+        Self { inner }
     }
 
     pub fn from_client(client: Client) -> Self {

@@ -50,6 +50,7 @@ fn resolve_key_universal<Client: PlayableClient>(
             KeyCode::Char('2') => app.navigate(NavigationRoute::LibraryTree),
             KeyCode::Char('3') => app.navigate(NavigationRoute::Config),
             KeyCode::Char('4') => app.navigate(NavigationRoute::Help),
+            KeyCode::Char('8') => app.client.get()?.duration(),
             KeyCode::Char('i') => {
                 app.tui_state.show_right_sidebar = !app.tui_state.show_right_sidebar;
             }
