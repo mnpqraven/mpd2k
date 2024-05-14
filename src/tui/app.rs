@@ -15,7 +15,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 use strum::{Display, EnumIter};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::runtime::{Builder, Handle, Runtime};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tracing::info;
 
 #[derive(Debug)]
 pub struct AppState<Client: PlayableClient> {
@@ -91,19 +93,40 @@ pub fn teardown() -> io::Result<()> {
 }
 
 impl<Client: PlayableClient> AppState<Client> {
-    pub fn from_client(
-        client: Client,
+    pub fn new(
         pb_send: UnboundedSender<AppToPlaybackEvent>,
         app_send: UnboundedSender<PlaybackToAppEvent>,
     ) -> Self {
         Self {
             navigation: NavigationState::default(),
             tui_state: Default::default(),
-            client: PlaybackClient::from_client(client),
+            client: PlaybackClient::new(app_send.clone(), pb_send.clone()),
             exit: false,
             pb_server: pb_send,
             pb_client: app_send,
         }
+    }
+
+    pub fn spawn_listener(
+        &self,
+        handle: Handle,
+        mut app_rx: UnboundedReceiver<PlaybackToAppEvent>,
+        _pb_client: Arc<Mutex<Client>>,
+    ) {
+        handle.spawn(async move {
+            // FIX: this is really weird to mutate Self
+            // shoudl probably use arced client instance here ?
+            while let Some(message) = app_rx.recv().await {
+                match message {
+                    PlaybackToAppEvent::CurrentDuration(num) => {
+                        info!("from lib thread {}", num);
+                        // do smth involving arc
+                    }
+                    PlaybackToAppEvent::Tick => {}
+                }
+            }
+            Ok::<(), AppError>(())
+        });
     }
 
     /// noop

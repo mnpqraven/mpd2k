@@ -218,23 +218,10 @@ impl LibraryClient {
     // expr
     pub fn new(
         app_tx: UnboundedSender<PlaybackToAppEvent>,
-        mut app_rx: UnboundedReceiver<PlaybackToAppEvent>,
         playback_tx: UnboundedSender<AppToPlaybackEvent>,
     ) -> (Self, UnboundedSender<PlaybackToAppEvent>) {
         let audio_tracks = try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default();
         info!(?audio_tracks);
-
-        tokio::spawn(async move {
-            while let Some(message) = app_rx.recv().await {
-                match message {
-                    PlaybackToAppEvent::CurrentDuration(num) => {
-                        info!("from lib thread {}", num);
-                    }
-                    PlaybackToAppEvent::Tick => {}
-                }
-            }
-            Ok::<(), AppError>(())
-        });
 
         // rx + tx + thread spawning here
         let res = Self {

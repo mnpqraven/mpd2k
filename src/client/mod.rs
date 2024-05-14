@@ -4,7 +4,7 @@ use crate::{error::AppError, tui::app::TuiState};
 use ratatui::widgets::TableState;
 use std::collections::BTreeMap;
 use std::sync::{Arc, LockResult, Mutex, MutexGuard, TryLockResult};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
 
 pub mod events;
 pub mod library;
@@ -18,7 +18,7 @@ pub enum ClientKind {
 pub trait PlayableClient {
     fn new(
         app_tx: UnboundedSender<PlaybackToAppEvent>,
-        app_rx: UnboundedReceiver<PlaybackToAppEvent>,
+        // app_rx: UnboundedReceiver<PlaybackToAppEvent>,
         playback_tx: UnboundedSender<AppToPlaybackEvent>,
     ) -> Self;
     fn play(&mut self, table_state: &TableState) -> Result<(), AppError>;
@@ -63,32 +63,30 @@ pub trait PlayableClient {
 }
 
 #[derive(Debug)]
-pub struct PlaybackClient<Client>
-where
-    Client: PlayableClient,
-{
+/// Arc<Mutex<T>> wrapper of a PlayableClient (lib or MPD)
+pub struct PlaybackClient<Client: PlayableClient> {
     inner: Arc<Mutex<Client>>,
-    // pub sender: UnboundedSender<AppToPlaybackEvent>,
-    // pub receiver: UnboundedReceiver<PlaybackToAppEvent>,
 }
 
-impl<Client> PlaybackClient<Client>
-where
-    Client: PlayableClient,
-{
+impl<Client: PlayableClient> PlaybackClient<Client> {
     pub fn new(
         app_tx: UnboundedSender<PlaybackToAppEvent>,
-        app_rx: UnboundedReceiver<PlaybackToAppEvent>,
         playback_tx: UnboundedSender<AppToPlaybackEvent>,
     ) -> Self {
-        let inner = Arc::new(Mutex::new(Client::new(app_tx, app_rx, playback_tx)));
+        let inner = Arc::new(Mutex::new(Client::new(app_tx, playback_tx)));
         Self { inner }
     }
+
+    pub fn listen_to_server(&mut self) {}
 
     pub fn from_client(client: Client) -> Self {
         Self {
             inner: Arc::new(Mutex::new(client)),
         }
+    }
+
+    pub fn arced(&self) -> Arc<Mutex<Client>> {
+        self.inner.clone()
     }
 
     /// lock of the playback client

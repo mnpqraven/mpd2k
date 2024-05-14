@@ -29,10 +29,9 @@ use tracing::{info, instrument};
 impl PlayableClient for LibraryClient {
     fn new(
         app_tx: UnboundedSender<PlaybackToAppEvent>,
-        app_rx: UnboundedReceiver<PlaybackToAppEvent>,
         playback_tx: UnboundedSender<AppToPlaybackEvent>,
     ) -> Self {
-        Self::new(app_tx, app_rx, playback_tx).0
+        Self::new(app_tx, playback_tx).0
     }
 
     #[instrument(skip(self))]

@@ -3,7 +3,10 @@ use crate::backend::library::types::AudioTrack;
 use crate::error::AppError;
 use rodio::{OutputStream, Sink};
 use std::sync::Arc;
-use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::{
+    runtime::{Builder, Handle, Runtime},
+    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
+};
 use tracing::info;
 
 #[derive(Debug, PartialEq)]
@@ -41,12 +44,12 @@ pub enum PlaybackToAppEvent {
 pub struct PlaybackServer {
     /// Event sender channel.
     pub sender: mpsc::UnboundedSender<AppToPlaybackEvent>,
-    /// Event receiver channel.
-    // pub receiver: mpsc::UnboundedReceiver<AppToPlaybackEvent>,
     /// Global sink that manages playback
     pub sink: SinkArc,
     pub stream: OutputStream,
     pub app_tx: UnboundedSender<PlaybackToAppEvent>,
+    /// Event receiver channel.
+    rx: UnboundedReceiver<AppToPlaybackEvent>,
 }
 
 pub struct SinkArc(pub Arc<Sink>);
@@ -59,32 +62,35 @@ impl SinkArc {
 // TODO: need to impl message passing the other way (from this to AppState)
 impl PlaybackServer {
     pub fn new_expr(
+        rx: UnboundedReceiver<AppToPlaybackEvent>,
         tx: UnboundedSender<AppToPlaybackEvent>,
-        mut rx: UnboundedReceiver<AppToPlaybackEvent>,
         app_tx: UnboundedSender<PlaybackToAppEvent>,
     ) -> (Self, mpsc::UnboundedSender<AppToPlaybackEvent>) {
         let (stream, stream_handle) = OutputStream::try_default().unwrap();
         let sink = Arc::new(Sink::try_new(&stream_handle).unwrap());
         let sink = SinkArc(sink);
-        let sink_for_thread = sink.arced();
-        // let (tx, mut rx) = mpsc::unbounded_channel::<AppToPlaybackEvent>();
-
-        let tx_inner = app_tx.clone();
-        tokio::spawn(async move {
-            while let Some(message) = rx.recv().await {
-                let sink = sink_for_thread.clone();
-                handle_message(sink, message, tx_inner.clone())?;
-            }
-            Ok::<(), AppError>(())
-        });
 
         let res = Self {
             sender: tx.clone(),
             sink,
             stream,
             app_tx,
+            rx,
         };
         (res, tx)
+    }
+
+    pub fn spawn_listener(mut self, handle: Handle) {
+        let sink_for_thread = self.sink.arced();
+        let tx_inner = self.app_tx.clone();
+
+        handle.spawn(async move {
+            while let Some(message) = self.rx.recv().await {
+                let sink = sink_for_thread.clone();
+                handle_message(sink, message, tx_inner.clone())?;
+            }
+            Ok::<(), AppError>(())
+        });
     }
 
     /// run the audio thread, this should return tick command instead of
