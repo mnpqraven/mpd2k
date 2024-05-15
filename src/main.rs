@@ -23,7 +23,7 @@ use tui::{
 };
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 12)]
-async fn inner_main() -> Result<(), AppError> {
+async fn main() -> Result<(), AppError> {
     // LOGGING
     let file_appender =
         tracing_appender::rolling::never(DotfileSchema::config_dir_path()?, "debug.log");
@@ -71,10 +71,5 @@ async fn inner_main() -> Result<(), AppError> {
     // STDOUT CLEANUP
     app::teardown()?;
 
-    Ok(())
-}
-
-fn main() -> Result<(), AppError> {
-    inner_main()?;
     Ok(())
 }
