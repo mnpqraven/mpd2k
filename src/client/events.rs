@@ -3,10 +3,7 @@ use crate::backend::library::types::AudioTrack;
 use crate::error::AppError;
 use rodio::{OutputStream, Sink};
 use std::sync::Arc;
-use tokio::{
-    runtime::{Builder, Handle, Runtime},
-    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
-};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::info;
 
 #[derive(Debug, PartialEq)]
@@ -80,11 +77,11 @@ impl PlaybackServer {
         (res, tx)
     }
 
-    pub fn spawn_listener(mut self, handle: Handle) {
+    pub fn spawn_listener(mut self) {
         let sink_for_thread = self.sink.arced();
         let tx_inner = self.app_tx.clone();
 
-        handle.spawn(async move {
+        tokio::spawn(async move {
             while let Some(message) = self.rx.recv().await {
                 let sink = sink_for_thread.clone();
                 handle_message(sink, message, tx_inner.clone())?;

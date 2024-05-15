@@ -18,7 +18,6 @@ pub enum ClientKind {
 pub trait PlayableClient {
     fn new(
         app_tx: UnboundedSender<PlaybackToAppEvent>,
-        // app_rx: UnboundedReceiver<PlaybackToAppEvent>,
         playback_tx: UnboundedSender<AppToPlaybackEvent>,
     ) -> Self;
     fn play(&mut self, table_state: &TableState) -> Result<(), AppError>;
@@ -59,7 +58,6 @@ pub trait PlayableClient {
     // queue next
     // seek
     fn kind(&self) -> ClientKind;
-    fn cleanup(self);
 }
 
 #[derive(Debug)]
@@ -109,16 +107,6 @@ impl<Client: PlayableClient> PlaybackClient<Client> {
         let arced = self.inner.clone();
         let mut inner = self.inner.lock()?;
         inner.update_lib(Some(arced), hard_update);
-        Ok(())
-    }
-
-    // consume self, returning inner struct data
-    pub fn teardown(self) -> Result<(), AppError> {
-        Arc::into_inner(self.inner)
-            .map(|e| e.into_inner())
-            .ok_or(AppError::BadUnwrap(Some("bad arc consume".into())))??
-            .cleanup();
-
         Ok(())
     }
 }

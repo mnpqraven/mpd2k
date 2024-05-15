@@ -1,10 +1,6 @@
 use super::app::{AppState, KeyMode, NavigationRoute};
-use crate::{
-    client::{events::PlaybackToAppEvent, PlayableClient},
-    error::AppError,
-};
+use crate::{client::PlayableClient, error::AppError};
 use crossterm::event::{KeyCode, KeyEvent};
-use tracing::info;
 
 impl<Client: PlayableClient> AppState<Client> {
     /// Handles the key events and updates the state of [`AppState`].

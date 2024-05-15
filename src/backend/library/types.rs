@@ -1,3 +1,7 @@
+use super::{
+    cache::{try_load_cache, try_load_cache_albums},
+    read_tag,
+};
 use crate::{
     backend::utils::empty_to_option,
     client::events::{AppToPlaybackEvent, PlaybackToAppEvent},
@@ -14,16 +18,8 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::{
-    runtime::{Builder, Runtime},
-    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
-};
+use tokio::sync::mpsc::UnboundedSender;
 use tracing::info;
-
-use super::{
-    cache::{try_load_cache, try_load_cache_albums},
-    read_tag,
-};
 
 #[derive(Debug)]
 pub struct LibraryClient {
@@ -41,7 +37,6 @@ pub struct LibraryClient {
     /// indicates the loading state of fetching audio tracks and caching if
     /// using file library
     pub loading: bool,
-    pub hashing_rt: Runtime,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -229,13 +224,13 @@ impl LibraryClient {
             loading: false,
             volume: 1.0,
             current_track: None,
-            hashing_rt: Builder::new_multi_thread()
-                // ensure hash is written in reasonable amount of time
-                // for 20~50Mb FLACs
-                .worker_threads(8)
-                .thread_name("hashing-worker")
-                .build()
-                .expect("Creating a tokio runtime on 12 threads"),
+            // hashing_rt: Builder::new_multi_thread()
+            //     // ensure hash is written in reasonable amount of time
+            //     // for 20~50Mb FLACs
+            //     .worker_threads(8)
+            //     .thread_name("hashing-worker")
+            //     .build()
+            //     .expect("Creating a tokio runtime on 12 threads"),
             albums: try_load_cache_albums(audio_tracks),
             playback_tx,
             shuffle: false,
@@ -252,10 +247,6 @@ impl LibraryClient {
 
     pub fn set_loading(&mut self, loading: bool) {
         self.loading = loading;
-    }
-
-    pub fn cleanup(self) {
-        self.hashing_rt.shutdown_background();
     }
 
     pub fn dedup(&mut self) {

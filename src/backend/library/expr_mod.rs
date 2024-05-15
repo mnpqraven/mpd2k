@@ -5,7 +5,7 @@ use std::{
     path::Path,
     sync::{Arc, Mutex},
 };
-use tokio::{runtime::Handle, task::JoinSet};
+use tokio::task::JoinSet;
 use tracing::{error, info, instrument};
 use walkdir::WalkDir;
 
@@ -13,7 +13,6 @@ use walkdir::WalkDir;
 pub async fn load_all_tracks_expr<P: AsRef<Path> + Debug>(
     lib_root: P,
     lib_arc: Arc<Mutex<LibraryClient>>,
-    handle: &Handle,
     // TODO: impl hard_update
 ) -> Result<(), AppError> {
     let library_tree = WalkDir::new(lib_root).follow_links(true);
@@ -26,29 +25,26 @@ pub async fn load_all_tracks_expr<P: AsRef<Path> + Debug>(
         let path = entry.path().to_string_lossy().to_string();
         let lib_arc = lib_arc.clone();
         if is_supported_audio(&path) {
-            tagging_task.spawn_on(
-                async move {
-                    let mut track = AudioTrack::new(path);
-                    track.update_tag()?;
+            tagging_task.spawn(async move {
+                let mut track = AudioTrack::new(path);
+                track.update_tag()?;
 
-                    let track_meta = AlbumMeta::from(&track);
+                let track_meta = AlbumMeta::from(&track);
 
-                    // add to album BTree
-                    let mut lib = lib_arc.lock()?;
-                    match lib.albums.get_mut(&track_meta) {
-                        Some(val) => {
-                            val.push(track.clone());
-                            val.sort_unstable();
-                        }
-                        None => {
-                            lib.albums.insert(track_meta, vec![track.clone()]);
-                        }
+                // add to album BTree
+                let mut lib = lib_arc.lock()?;
+                match lib.albums.get_mut(&track_meta) {
+                    Some(val) => {
+                        val.push(track.clone());
+                        val.sort_unstable();
                     }
+                    None => {
+                        lib.albums.insert(track_meta, vec![track.clone()]);
+                    }
+                }
 
-                    Ok::<AudioTrack, AppError>(track)
-                },
-                handle,
-            );
+                Ok::<AudioTrack, AppError>(track)
+            });
         }
     }
 
@@ -61,10 +57,7 @@ pub async fn load_all_tracks_expr<P: AsRef<Path> + Debug>(
     Ok(())
 }
 
-pub async fn load_hash_expr(
-    lib_arc: Arc<Mutex<LibraryClient>>,
-    handle: &Handle,
-) -> Result<(), AppError> {
+pub async fn load_hash_expr(lib_arc: Arc<Mutex<LibraryClient>>) -> Result<(), AppError> {
     let arc_outer = lib_arc.clone();
     info!("locking");
     let all: Vec<(AlbumMeta, Vec<Arc<str>>)> = arc_outer.lock().map(|lib| {
@@ -88,13 +81,10 @@ pub async fn load_hash_expr(
 
         for path in paths {
             let meta_arc_inner = meta_arc.clone();
-            join_set.spawn_on(
-                async move {
-                    let hash = hash_file(path.as_ref(), super::HashKind::XxHash)?;
-                    Ok::<(Arc<AlbumMeta>, Arc<str>, String), AppError>((meta_arc_inner, path, hash))
-                },
-                handle,
-            );
+            join_set.spawn(async move {
+                let hash = hash_file(path.as_ref(), super::HashKind::XxHash)?;
+                Ok::<(Arc<AlbumMeta>, Arc<str>, String), AppError>((meta_arc_inner, path, hash))
+            });
         }
     }
 

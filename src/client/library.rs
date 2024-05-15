@@ -20,10 +20,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::sync::{
-    mpsc::{UnboundedReceiver, UnboundedSender},
-    oneshot,
-};
+use tokio::sync::{mpsc::UnboundedSender, oneshot};
 use tracing::{info, instrument};
 
 impl PlayableClient for LibraryClient {
@@ -196,14 +193,11 @@ impl PlayableClient for LibraryClient {
             && !self.loading
         {
             self.set_loading(true);
-            let handle = self.hashing_rt.handle();
-            let hash_handle = handle.clone();
-            let hash_handle_2nd = handle.clone();
             let self_arc_2nd = self_arc.clone();
 
             let (tx, rx) = oneshot::channel();
 
-            self.hashing_rt.spawn(async move {
+            tokio::spawn(async move {
                 let now = Instant::now();
                 info!("inside hashing thread");
 
@@ -216,7 +210,7 @@ impl PlayableClient for LibraryClient {
                 }
 
                 // NEW CODE USING LOADING THEN ADDING TO ALBUM BTREE
-                load_all_tracks_expr(&lib_root, self_arc.clone(), &hash_handle.clone()).await?;
+                load_all_tracks_expr(&lib_root, self_arc.clone()).await?;
 
                 if let Ok(mut lib) = self_arc.lock() {
                     // TODO: check for index drift
@@ -233,12 +227,12 @@ impl PlayableClient for LibraryClient {
 
             // FIX: this cause blocking and delay the play message sent to sink
             // just that the message is very delayed during hashing/updating
-            self.hashing_rt.spawn(async move {
+            tokio::spawn(async move {
                 info!("inside 2nd hashing thread");
                 if let Ok(true) = rx.await {
                     info!("begin hashing update");
                     // FIX: this blocks playback state
-                    load_hash_expr(self_arc_2nd.clone(), &hash_handle_2nd.clone()).await?;
+                    load_hash_expr(self_arc_2nd.clone()).await?;
                     hash_cleanup(self_arc_2nd.clone())?;
                 }
                 Ok::<(), AppError>(())
@@ -252,10 +246,6 @@ impl PlayableClient for LibraryClient {
 
     fn volume_percentage(&self) -> u8 {
         (self.volume * 100.0).round() as u8
-    }
-
-    fn cleanup(self) {
-        self.hashing_rt.shutdown_background();
     }
 
     fn cycle_repeat(&mut self) {

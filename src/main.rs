@@ -7,8 +7,6 @@ pub mod dotfile;
 pub mod error;
 pub mod tui;
 
-use core::panic;
-
 use backend::library::types::LibraryClient;
 use client::{
     events::{AppToPlaybackEvent, PlaybackServer, PlaybackToAppEvent},
@@ -17,15 +15,15 @@ use client::{
 use dotfile::DotfileSchema;
 use error::AppError;
 use ratatui::{backend::CrosstermBackend, Terminal};
-use tokio::{runtime::Builder, sync::mpsc};
+use tokio::sync::mpsc;
 use tui::{
     app::{self, AppState},
     events::{Event, EventHandler},
     Tui,
 };
 
-#[tokio::main]
-async fn main() -> Result<(), AppError> {
+#[tokio::main(flavor = "multi_thread", worker_threads = 12)]
+async fn inner_main() -> Result<(), AppError> {
     // LOGGING
     let file_appender =
         tracing_appender::rolling::never(DotfileSchema::config_dir_path()?, "debug.log");
@@ -38,17 +36,14 @@ async fn main() -> Result<(), AppError> {
     // consume sender
     let (pb_tx, pb_rx) = mpsc::unbounded_channel::<AppToPlaybackEvent>();
     let (app_tx, app_rx) = mpsc::unbounded_channel::<PlaybackToAppEvent>();
-    // FIX: this is messing up tokio::main
-    // TODO: use actual main and expand tokio::main macro
-    let rt = Builder::new_current_thread().build().unwrap();
 
     let (playback_server, playback_send) = PlaybackServer::new_expr(pb_rx, pb_tx, app_tx.clone());
     let playback_client =
         PlaybackClient::<LibraryClient>::new(app_tx.clone(), playback_send.clone());
     let mut app = AppState::new(playback_send.clone(), app_tx.clone());
 
-    playback_server.spawn_listener(rt.handle().clone());
-    app.spawn_listener(rt.handle().clone(), app_rx, playback_client.arced());
+    playback_server.spawn_listener();
+    app.spawn_listener(app_rx, playback_client.arced());
 
     let backend = CrosstermBackend::new(std::io::stderr());
     let terminal = Terminal::new(backend)?;
@@ -73,11 +68,13 @@ async fn main() -> Result<(), AppError> {
         }
     }
 
-
     // STDOUT CLEANUP
-    app.client.teardown()?;
-    rt.shutdown_background();
     app::teardown()?;
 
+    Ok(())
+}
+
+fn main() -> Result<(), AppError> {
+    inner_main()?;
     Ok(())
 }

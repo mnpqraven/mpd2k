@@ -15,7 +15,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 use strum::{Display, EnumIter};
-use tokio::runtime::{Builder, Handle, Runtime};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tracing::info;
 
@@ -109,11 +108,10 @@ impl<Client: PlayableClient> AppState<Client> {
 
     pub fn spawn_listener(
         &self,
-        handle: Handle,
         mut app_rx: UnboundedReceiver<PlaybackToAppEvent>,
         _pb_client: Arc<Mutex<Client>>,
     ) {
-        handle.spawn(async move {
+        tokio::spawn(async move {
             // FIX: this is really weird to mutate Self
             // shoudl probably use arced client instance here ?
             while let Some(message) = app_rx.recv().await {
