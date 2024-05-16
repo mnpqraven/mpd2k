@@ -99,7 +99,7 @@ impl<Client: PlayableClient> AppState<Client> {
         Self {
             navigation: NavigationState::default(),
             tui_state: Default::default(),
-            client: PlaybackClient::new(app_send.clone(), pb_send.clone()),
+            client: PlaybackClient::new(&pb_send, &app_send),
             exit: false,
             pb_server: pb_send,
             pb_client: app_send,

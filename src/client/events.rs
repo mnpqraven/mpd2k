@@ -36,17 +36,15 @@ pub enum PlaybackToAppEvent {
     Tick,
 }
 
-/// wrapper struct that takes ownership of metadata from other clients so they
-/// can drop the mutex guard
+/// A server that handles a sink for playback and listens to signals from the
+/// client
 pub struct PlaybackServer {
     /// Event sender channel.
-    pub sender: mpsc::UnboundedSender<AppToPlaybackEvent>,
+    pub pb_tx: mpsc::UnboundedSender<AppToPlaybackEvent>,
     /// Global sink that manages playback
     pub sink: SinkArc,
     pub stream: OutputStream,
     pub app_tx: UnboundedSender<PlaybackToAppEvent>,
-    /// Event receiver channel.
-    rx: UnboundedReceiver<AppToPlaybackEvent>,
 }
 
 pub struct SinkArc(pub Arc<Sink>);
@@ -56,33 +54,29 @@ impl SinkArc {
     }
 }
 
-// TODO: need to impl message passing the other way (from this to AppState)
 impl PlaybackServer {
     pub fn new_expr(
-        rx: UnboundedReceiver<AppToPlaybackEvent>,
-        tx: UnboundedSender<AppToPlaybackEvent>,
-        app_tx: UnboundedSender<PlaybackToAppEvent>,
-    ) -> (Self, mpsc::UnboundedSender<AppToPlaybackEvent>) {
+        pb_tx: &UnboundedSender<AppToPlaybackEvent>,
+        app_tx: &UnboundedSender<PlaybackToAppEvent>,
+    ) -> Self {
         let (stream, stream_handle) = OutputStream::try_default().unwrap();
         let sink = Arc::new(Sink::try_new(&stream_handle).unwrap());
         let sink = SinkArc(sink);
 
-        let res = Self {
-            sender: tx.clone(),
+        Self {
+            pb_tx: pb_tx.clone(),
             sink,
             stream,
-            app_tx,
-            rx,
-        };
-        (res, tx)
+            app_tx: app_tx.clone(),
+        }
     }
 
-    pub fn spawn_listener(mut self) {
+    pub fn spawn_listener(&self, mut pb_rx: UnboundedReceiver<AppToPlaybackEvent>) {
         let sink_for_thread = self.sink.arced();
         let tx_inner = self.app_tx.clone();
 
         tokio::spawn(async move {
-            while let Some(message) = self.rx.recv().await {
+            while let Some(message) = pb_rx.recv().await {
                 let sink = sink_for_thread.clone();
                 handle_message(sink, message, tx_inner.clone())?;
             }

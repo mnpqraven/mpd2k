@@ -22,6 +22,10 @@ use tui::{
     Tui,
 };
 
+// 60 fps
+#[allow(non_snake_case)]
+const TICK_RATE: u64 = 16;
+
 #[tokio::main(flavor = "multi_thread", worker_threads = 12)]
 async fn main() -> Result<(), AppError> {
     // LOGGING
@@ -37,20 +41,16 @@ async fn main() -> Result<(), AppError> {
     let (pb_tx, pb_rx) = mpsc::unbounded_channel::<AppToPlaybackEvent>();
     let (app_tx, app_rx) = mpsc::unbounded_channel::<PlaybackToAppEvent>();
 
-    let (playback_server, playback_send) = PlaybackServer::new_expr(pb_rx, pb_tx, app_tx.clone());
-    let playback_client =
-        PlaybackClient::<LibraryClient>::new(app_tx.clone(), playback_send.clone());
-    let mut app = AppState::new(playback_send.clone(), app_tx.clone());
+    let playback_server = PlaybackServer::new_expr(&pb_tx, &app_tx);
+    let playback_client = PlaybackClient::<LibraryClient>::new(&pb_tx, &app_tx);
+    let mut app = AppState::new(pb_tx, app_tx);
 
-    playback_server.spawn_listener();
+    playback_server.spawn_listener(pb_rx);
     app.spawn_listener(app_rx, playback_client.arced());
 
     let backend = CrosstermBackend::new(std::io::stderr());
     let terminal = Terminal::new(backend)?;
 
-    // 60 fps
-    #[allow(non_snake_case)]
-    let TICK_RATE = 16;
     let events = EventHandler::new(TICK_RATE);
     let mut tui = Tui::new(terminal, events);
 

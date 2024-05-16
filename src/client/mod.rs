@@ -68,10 +68,10 @@ pub struct PlaybackClient<Client: PlayableClient> {
 
 impl<Client: PlayableClient> PlaybackClient<Client> {
     pub fn new(
-        app_tx: UnboundedSender<PlaybackToAppEvent>,
-        playback_tx: UnboundedSender<AppToPlaybackEvent>,
+        playback_tx: &UnboundedSender<AppToPlaybackEvent>,
+        app_tx: &UnboundedSender<PlaybackToAppEvent>,
     ) -> Self {
-        let inner = Arc::new(Mutex::new(Client::new(app_tx, playback_tx)));
+        let inner = Arc::new(Mutex::new(Client::new(app_tx.clone(), playback_tx.clone())));
         Self { inner }
     }
 
