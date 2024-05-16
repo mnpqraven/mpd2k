@@ -120,34 +120,6 @@ impl PlayableClient for LibraryClient {
         Ok(())
     }
 
-    fn check_image(&self, tui_state: &mut TuiState) -> Result<(), AppError> {
-        let table_state = tui_state.playback_table.lock()?;
-        let idx = table_state.selected();
-        let img_state = tui_state.image.lock().map(|e| e.0.clone())?;
-        match (idx, &img_state) {
-            (Some(index), _) => {
-                // safe unwrap
-                if let Some(track) = self.audio_tracks().get(index) {
-                    if track.album != tui_state.last_album {
-                        if let (Ok(mut image), Some(p)) =
-                            (tui_state.image.lock(), track.try_cover_path())
-                        {
-                            image.update(p);
-                        }
-                    }
-                    tui_state.last_album.clone_from(&track.album);
-                }
-            }
-            (None, Some(_)) => {
-                if let Ok(mut image) = tui_state.image.lock() {
-                    image.unset();
-                }
-            }
-            (None, None) => {}
-        }
-        Ok(())
-    }
-
     fn pause_unpause(&self) {
         let _ = self.playback_tx.send(AppToPlaybackEvent::TogglePause);
     }

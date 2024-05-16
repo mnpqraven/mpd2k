@@ -1,4 +1,3 @@
-use super::render::image::ImageState;
 use crate::client::events::PlaybackToAppEvent;
 use crate::client::PlayableClient;
 use crate::client::{events::AppToPlaybackEvent, PlaybackClient};
@@ -34,7 +33,6 @@ pub struct TuiState {
     pub library_table: Arc<Mutex<TableState>>,
     pub show_right_sidebar: bool,
     pub show_left_sidebar: bool,
-    pub image: Arc<Mutex<ImageState>>,
     pub last_album: Option<Arc<str>>,
     pub key_mode: KeyMode,
     pub key_queue: Vec<KeyCode>,
@@ -55,7 +53,6 @@ impl Default for TuiState {
             library_table: Default::default(),
             show_right_sidebar: true,
             show_left_sidebar: true,
-            image: Default::default(),
             last_album: None,
             key_mode: Default::default(),
             key_queue: Vec::new(),
@@ -112,15 +109,12 @@ impl<Client: PlayableClient> AppState<Client> {
         _pb_client: Arc<Mutex<Client>>,
     ) {
         tokio::spawn(async move {
-            // FIX: this is really weird to mutate Self
-            // shoudl probably use arced client instance here ?
             while let Some(message) = app_rx.recv().await {
                 match message {
                     PlaybackToAppEvent::CurrentDuration(num) => {
                         info!("from lib thread {}", num);
                         // do smth involving arc
                     }
-                    PlaybackToAppEvent::Tick => {}
                 }
             }
             Ok::<(), AppError>(())

@@ -34,9 +34,6 @@ pub trait PlayableClient {
     fn select_first_track(&self, table_state: &mut TuiState) -> Result<(), AppError>;
     fn select_last_track(&self, table_state: &mut TuiState) -> Result<(), AppError>;
 
-    /// updates the last_album + image if necessary
-    fn check_image(&self, tui_state: &mut TuiState) -> Result<(), AppError>;
-
     fn pause_unpause(&self);
     fn update_lib(&mut self, self_arc: Option<Arc<Mutex<Self>>>, hard_update: bool);
 

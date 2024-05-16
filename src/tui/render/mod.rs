@@ -1,6 +1,5 @@
 mod config;
 mod help;
-pub mod image;
 mod playback;
 pub mod tree;
 

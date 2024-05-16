@@ -43,6 +43,7 @@ async fn main() -> Result<(), AppError> {
 
     let playback_server = PlaybackServer::new_expr(&pb_tx, &app_tx);
     let playback_client = PlaybackClient::<LibraryClient>::new(&pb_tx, &app_tx);
+    // TODO: refactor Mutex to RwLock
     let mut app = AppState::new(pb_tx, app_tx);
 
     playback_server.spawn_listener(pb_rx);

@@ -19,8 +19,7 @@ futures = "0.3.30"
 image = { version = "0.24.5" }
 murmur3 = "0.5.2"
 rand = "0.8.5"
-ratatui = "0.25.0"
-ratatui-image = "1.0.0"
+ratatui = { git = "https://github.com/ratatui-org/ratatui" }
 rodio = "0.17.3"
 serde = { version = "1.0.198", features = ["derive"] }
 sha2 = "0.10.8"

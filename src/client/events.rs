@@ -1,7 +1,7 @@
 use crate::backend::library::create_source;
 use crate::backend::library::types::AudioTrack;
 use crate::error::AppError;
-use rodio::{OutputStream, Sink};
+use rodio::{OutputStream, OutputStreamHandle, Sink};
 use std::sync::Arc;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::info;
@@ -33,7 +33,6 @@ pub enum AppToPlaybackEvent {
 #[derive(Debug)]
 pub enum PlaybackToAppEvent {
     CurrentDuration(i64),
-    Tick,
 }
 
 /// A server that handles a sink for playback and listens to signals from the
@@ -43,12 +42,21 @@ pub struct PlaybackServer {
     pub pb_tx: mpsc::UnboundedSender<AppToPlaybackEvent>,
     /// Global sink that manages playback
     pub sink: SinkArc,
-    pub stream: OutputStream,
+    /// Stream for the sink, this must have a longer lifetime than the sink
+    /// itself
+    _stream: OutputStream,
+    /// App sender channel.
     pub app_tx: UnboundedSender<PlaybackToAppEvent>,
 }
 
 pub struct SinkArc(pub Arc<Sink>);
 impl SinkArc {
+    fn new(stream: &OutputStreamHandle) -> Self {
+        Self(Arc::new(
+            Sink::try_new(stream).expect("should always have at least one device"),
+        ))
+    }
+
     pub fn arced(&self) -> Arc<Sink> {
         self.0.clone()
     }
@@ -59,14 +67,14 @@ impl PlaybackServer {
         pb_tx: &UnboundedSender<AppToPlaybackEvent>,
         app_tx: &UnboundedSender<PlaybackToAppEvent>,
     ) -> Self {
+        // NOTE: this stream must not be dropped early
         let (stream, stream_handle) = OutputStream::try_default().unwrap();
-        let sink = Arc::new(Sink::try_new(&stream_handle).unwrap());
-        let sink = SinkArc(sink);
+        let sink = SinkArc::new(&stream_handle);
 
         Self {
             pb_tx: pb_tx.clone(),
             sink,
-            stream,
+            _stream: stream,
             app_tx: app_tx.clone(),
         }
     }
@@ -82,63 +90,6 @@ impl PlaybackServer {
             }
             Ok::<(), AppError>(())
         });
-    }
-
-    /// run the audio thread, this should return tick command instead of
-    /// blocking the main thread
-    pub fn handle_events(&mut self) -> Result<(), AppError> {
-        // creates a new sink
-        // TODO: if this works we can move sink to its own backend struct to
-        // manage
-
-        // FIX: messages is missing
-        // if let Ok(message) = self.receiver.try_recv() {
-        //     let sink = self.sink.arced();
-        //
-        //     if message != AppToPlaybackEvent::PlayStatus && message != AppToPlaybackEvent::Tick {
-        //         info!(?message);
-        //     }
-        //
-        //     match message {
-        //         AppToPlaybackEvent::Play => sink.play(),
-        //         AppToPlaybackEvent::TogglePause => match sink.is_paused() {
-        //             true => sink.play(),
-        //             false => sink.pause(),
-        //         },
-        //         AppToPlaybackEvent::VolumeUp => {
-        //             // TODO: works but bad practice, create a different init block instead
-        //             // self.sender
-        //             //     .send(PlaybackToAppEvent::CurrentDuration(1000))?;
-        //
-        //             match sink.volume() {
-        //                 0.95.. => sink.set_volume(1.0),
-        //                 _ => sink.set_volume(sink.volume() + 0.05),
-        //             }
-        //         }
-        //         AppToPlaybackEvent::VolumeDown => match sink.volume() {
-        //             0.05.. => sink.set_volume(sink.volume() - 0.05),
-        //             _ => sink.set_volume(0.0),
-        //         },
-        //         AppToPlaybackEvent::SetQueue(q_arc) => {
-        //             sink.clear();
-        //             // TODO: perf, reading 20 binaries is very expensive
-        //             for track in q_arc.iter() {
-        //                 let source = create_source(track.path.as_ref())?;
-        //                 sink.append(source);
-        //             }
-        //         }
-        //         AppToPlaybackEvent::AppendQueue(q_arc) => {
-        //             // TODO: perf, reading 20 binaries is very expensive
-        //             for track in q_arc.iter() {
-        //                 let source = create_source(track.path.as_ref())?;
-        //                 sink.append(source);
-        //             }
-        //         }
-        //         _ => {}
-        //     }
-        // }
-
-        Ok(())
     }
 }
 
