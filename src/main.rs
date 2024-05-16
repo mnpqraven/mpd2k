@@ -3,31 +3,50 @@
 
 pub mod backend;
 pub mod client;
+pub mod constants;
 pub mod dotfile;
 pub mod error;
 pub mod tui;
 
 use backend::library::types::LibraryClient;
-use client::{
-    events::{AppToPlaybackEvent, PlaybackServer, PlaybackToAppEvent},
-    PlaybackClient,
-};
+use client::events::{AppToPlaybackEvent, PlaybackServer, PlaybackToAppEvent};
+use constants::{HASH_CONCURRENT_LIMIT, TICK_RATE};
 use dotfile::DotfileSchema;
 use error::AppError;
 use ratatui::{backend::CrosstermBackend, Terminal};
-use tokio::sync::mpsc;
+use tokio::{
+    runtime::{Builder, Handle},
+    sync::mpsc,
+};
 use tui::{
     app::{self, AppState},
     events::{Event, EventHandler},
     Tui,
 };
 
-// 60 fps
-#[allow(non_snake_case)]
-const TICK_RATE: u64 = 16;
+fn main() -> Result<(), AppError> {
+    // NOTE: clap arg here if needed
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 12)]
-async fn main() -> Result<(), AppError> {
+    let hashing_rt = Builder::new_multi_thread()
+        .thread_name("hashing thread")
+        .worker_threads(HASH_CONCURRENT_LIMIT)
+        .enable_all()
+        .build()
+        .unwrap();
+    let hashing_handle = hashing_rt.handle();
+
+    let main_rt = Builder::new_multi_thread()
+        .thread_name("main thread")
+        .enable_all()
+        .build()
+        .unwrap();
+
+    main_rt.block_on(_main(hashing_handle))?;
+
+    Ok(())
+}
+
+async fn _main(hash_handle: &Handle) -> Result<(), AppError> {
     // LOGGING
     let file_appender =
         tracing_appender::rolling::never(DotfileSchema::config_dir_path()?, "debug.log");
@@ -42,12 +61,11 @@ async fn main() -> Result<(), AppError> {
     let (app_tx, app_rx) = mpsc::unbounded_channel::<PlaybackToAppEvent>();
 
     let playback_server = PlaybackServer::new_expr(&pb_tx, &app_tx);
-    let playback_client = PlaybackClient::<LibraryClient>::new(&pb_tx, &app_tx);
     // TODO: refactor Mutex to RwLock
-    let mut app = AppState::new(pb_tx, app_tx);
+    let mut app = AppState::<LibraryClient>::new(pb_tx, app_tx, hash_handle.clone());
 
     playback_server.spawn_listener(pb_rx);
-    app.spawn_listener(app_rx, playback_client.arced());
+    app.spawn_listener(app_rx);
 
     let backend = CrosstermBackend::new(std::io::stderr());
     let terminal = Terminal::new(backend)?;

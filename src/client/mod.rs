@@ -4,6 +4,7 @@ use crate::{error::AppError, tui::app::TuiState};
 use ratatui::widgets::TableState;
 use std::collections::BTreeMap;
 use std::sync::{Arc, LockResult, Mutex, MutexGuard, TryLockResult};
+use tokio::runtime::Handle;
 use tokio::sync::mpsc::UnboundedSender;
 
 pub mod events;
@@ -19,6 +20,7 @@ pub trait PlayableClient {
     fn new(
         app_tx: UnboundedSender<PlaybackToAppEvent>,
         playback_tx: UnboundedSender<AppToPlaybackEvent>,
+        hash_handle: Handle,
     ) -> Self;
     fn play(&mut self, table_state: &TableState) -> Result<(), AppError>;
 
@@ -67,12 +69,15 @@ impl<Client: PlayableClient> PlaybackClient<Client> {
     pub fn new(
         playback_tx: &UnboundedSender<AppToPlaybackEvent>,
         app_tx: &UnboundedSender<PlaybackToAppEvent>,
+        hash_handle: Handle,
     ) -> Self {
-        let inner = Arc::new(Mutex::new(Client::new(app_tx.clone(), playback_tx.clone())));
+        let inner = Arc::new(Mutex::new(Client::new(
+            app_tx.clone(),
+            playback_tx.clone(),
+            hash_handle,
+        )));
         Self { inner }
     }
-
-    pub fn listen_to_server(&mut self) {}
 
     pub fn from_client(client: Client) -> Self {
         Self {

@@ -14,6 +14,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use strum::{Display, EnumIter};
+use tokio::runtime::Handle;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tracing::info;
 
@@ -92,22 +93,20 @@ impl<Client: PlayableClient> AppState<Client> {
     pub fn new(
         pb_send: UnboundedSender<AppToPlaybackEvent>,
         app_send: UnboundedSender<PlaybackToAppEvent>,
+        hash_handle: Handle,
     ) -> Self {
         Self {
             navigation: NavigationState::default(),
             tui_state: Default::default(),
-            client: PlaybackClient::new(&pb_send, &app_send),
+            client: PlaybackClient::new(&pb_send, &app_send, hash_handle),
             exit: false,
             pb_server: pb_send,
             pb_client: app_send,
         }
     }
 
-    pub fn spawn_listener(
-        &self,
-        mut app_rx: UnboundedReceiver<PlaybackToAppEvent>,
-        _pb_client: Arc<Mutex<Client>>,
-    ) {
+    pub fn spawn_listener(&self, mut app_rx: UnboundedReceiver<PlaybackToAppEvent>) {
+        let _pb_client = self.client.arced();
         tokio::spawn(async move {
             while let Some(message) = app_rx.recv().await {
                 match message {

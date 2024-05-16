@@ -1,5 +1,8 @@
 use super::{hash::hash_file, AlbumMeta, AudioTrack, LibraryClient};
-use crate::{backend::utils::is_supported_audio, client::PlayableClient, error::AppError};
+use crate::{
+    backend::utils::is_supported_audio, client::PlayableClient, constants::HASH_SEMAPHORE,
+    error::AppError,
+};
 use std::{
     fmt::Debug,
     path::Path,
@@ -58,8 +61,9 @@ pub async fn load_all_tracks_expr<P: AsRef<Path> + Debug>(
 }
 
 pub async fn load_hash_expr(lib_arc: Arc<Mutex<LibraryClient>>) -> Result<(), AppError> {
+    let _permit = HASH_SEMAPHORE.acquire().await.unwrap();
+
     let arc_outer = lib_arc.clone();
-    info!("locking");
     let all: Vec<(AlbumMeta, Vec<Arc<str>>)> = arc_outer.lock().map(|lib| {
         lib.albums()
             .iter()
@@ -72,7 +76,6 @@ pub async fn load_hash_expr(lib_arc: Arc<Mutex<LibraryClient>>) -> Result<(), Ap
             })
             .collect()
     })?;
-    info!("unlocking");
 
     let mut join_set = JoinSet::new();
 

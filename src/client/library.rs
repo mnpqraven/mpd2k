@@ -20,15 +20,19 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::sync::{mpsc::UnboundedSender, oneshot};
+use tokio::{
+    runtime::Handle,
+    sync::{mpsc::UnboundedSender, oneshot},
+};
 use tracing::{info, instrument};
 
 impl PlayableClient for LibraryClient {
     fn new(
         app_tx: UnboundedSender<PlaybackToAppEvent>,
         playback_tx: UnboundedSender<AppToPlaybackEvent>,
+        hash_handle: Handle,
     ) -> Self {
-        Self::new(app_tx, playback_tx).0
+        Self::new(app_tx, playback_tx, hash_handle).0
     }
 
     #[instrument(skip(self))]
@@ -169,10 +173,8 @@ impl PlayableClient for LibraryClient {
 
             let (tx, rx) = oneshot::channel();
 
-            tokio::spawn(async move {
+            self.hash_handle.spawn(async move {
                 let now = Instant::now();
-                info!("inside hashing thread");
-
                 let lib_root = DotfileSchema::parse()?.library_root()?;
                 { // OLD CODE
                      // load_all_tracks_raw(lib_root, self_arc.clone(), hard_update).await?;
@@ -193,14 +195,13 @@ impl PlayableClient for LibraryClient {
                 if tx.send(true).is_err() {
                     info!("oneshot channel dropped");
                 }
-                info!("hashing_rt total load: {elapsed} s");
+                info!("hashing_rt total load: {elapsed} ms");
                 Ok::<(), AppError>(())
             });
 
             // FIX: this cause blocking and delay the play message sent to sink
             // just that the message is very delayed during hashing/updating
-            tokio::spawn(async move {
-                info!("inside 2nd hashing thread");
+            self.hash_handle.spawn(async move {
                 if let Ok(true) = rx.await {
                     info!("begin hashing update");
                     // FIX: this blocks playback state

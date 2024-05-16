@@ -18,7 +18,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::{runtime::Handle, sync::mpsc::UnboundedSender};
 use tracing::info;
 
 #[derive(Debug)]
@@ -37,6 +37,7 @@ pub struct LibraryClient {
     /// indicates the loading state of fetching audio tracks and caching if
     /// using file library
     pub loading: bool,
+    pub hash_handle: Handle,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -172,20 +173,22 @@ impl AudioTrack {
     pub fn try_cover_path(&self) -> Option<PathBuf> {
         let track_path = PathBuf::from(self.path.as_ref());
         let dir = track_path.parent();
-        if let Some(dir) = dir {
-            let img_paths: Vec<PathBuf> = read_dir(dir)
-                .unwrap()
-                .filter(|e| {
-                    let path = e.as_ref().unwrap().path();
-                    ["png", "jpg"]
-                        .into_iter()
-                        .any(|ext| ext == path.extension().unwrap())
-                })
-                .map(|e| e.unwrap().path())
-                .collect();
-            return img_paths.first().cloned();
+        match dir {
+            Some(dir) => {
+                let img_paths: Vec<PathBuf> = read_dir(dir)
+                    .unwrap()
+                    .filter(|e| {
+                        let path = e.as_ref().unwrap().path();
+                        ["png", "jpg"]
+                            .into_iter()
+                            .any(|ext| ext == path.extension().unwrap())
+                    })
+                    .map(|e| e.unwrap().path())
+                    .collect();
+                return img_paths.first().cloned();
+            }
+            _ => None,
         }
-        None
     }
 }
 
@@ -214,6 +217,7 @@ impl LibraryClient {
     pub fn new(
         app_tx: UnboundedSender<PlaybackToAppEvent>,
         playback_tx: UnboundedSender<AppToPlaybackEvent>,
+        hash_handle: Handle,
     ) -> (Self, UnboundedSender<PlaybackToAppEvent>) {
         let audio_tracks = try_load_cache(DotfileSchema::cache_path().unwrap()).unwrap_or_default();
         info!(?audio_tracks);
@@ -224,13 +228,7 @@ impl LibraryClient {
             loading: false,
             volume: 1.0,
             current_track: None,
-            // hashing_rt: Builder::new_multi_thread()
-            //     // ensure hash is written in reasonable amount of time
-            //     // for 20~50Mb FLACs
-            //     .worker_threads(8)
-            //     .thread_name("hashing-worker")
-            //     .build()
-            //     .expect("Creating a tokio runtime on 12 threads"),
+            hash_handle,
             albums: try_load_cache_albums(audio_tracks),
             playback_tx,
             shuffle: false,
