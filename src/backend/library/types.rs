@@ -196,9 +196,8 @@ impl AlbumDate {
     pub fn parse(text: TimestampTag) -> Option<Self> {
         match text {
             TimestampTag::Id3(_) => todo!(),
-            TimestampTag::Unknown(text) =>
-            // TODO: more formats
-            {
+            TimestampTag::Unknown(text) => {
+                // TODO: more formats
                 match NaiveDate::parse_from_str(&text, "%Y.%m.%d") {
                     Ok(s) => Some(Self {
                         year: s.year() as u32,

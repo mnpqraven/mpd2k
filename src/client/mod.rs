@@ -61,8 +61,9 @@ pub trait PlayableClient {
 
 #[derive(Debug)]
 /// Arc<Mutex<T>> wrapper of a PlayableClient (lib or MPD)
+/// this is mostly used to access helper fns
 pub struct PlaybackClient<Client: PlayableClient> {
-    inner: Arc<Mutex<Client>>,
+    guard: Arc<Mutex<Client>>,
 }
 
 impl<Client: PlayableClient> PlaybackClient<Client> {
@@ -71,34 +72,29 @@ impl<Client: PlayableClient> PlaybackClient<Client> {
         app_tx: &UnboundedSender<PlaybackToAppEvent>,
         hash_handle: Handle,
     ) -> Self {
-        let inner = Arc::new(Mutex::new(Client::new(
+        let guard = Arc::new(Mutex::new(Client::new(
             app_tx.clone(),
             playback_tx.clone(),
             hash_handle,
         )));
-        Self { inner }
+        Self { guard }
     }
 
-    pub fn from_client(client: Client) -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(client)),
-        }
-    }
-
+    /// return the client arc
     pub fn arced(&self) -> Arc<Mutex<Client>> {
-        self.inner.clone()
+        self.guard.clone()
     }
 
     /// lock of the playback client
     /// this function blocks until the lock is free
     pub fn get(&self) -> LockResult<MutexGuard<'_, Client>> {
-        self.inner.lock()
+        self.guard.lock()
     }
 
     /// lock of the playback client
     /// this function does not block
     pub fn try_get(&self) -> TryLockResult<MutexGuard<'_, Client>> {
-        self.inner.try_lock()
+        self.guard.try_lock()
     }
 
     /// Triggers the update on the audio list,
@@ -106,8 +102,8 @@ impl<Client: PlayableClient> PlaybackClient<Client> {
     /// For library the directory is fully loaded unhashed then a
     /// hashing worker is queued in the background
     pub fn update_lib(&mut self, hard_update: bool) -> Result<(), AppError> {
-        let arced = self.inner.clone();
-        let mut inner = self.inner.lock()?;
+        let arced = self.guard.clone();
+        let mut inner = self.guard.lock()?;
         inner.update_lib(Some(arced), hard_update);
         Ok(())
     }

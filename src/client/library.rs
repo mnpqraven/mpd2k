@@ -5,7 +5,7 @@ use super::{
 use crate::{
     backend::library::{
         create_source,
-        expr_mod::{hash_cleanup, load_all_tracks_expr, load_hash_expr},
+        expr_mod::{hash_cleanup, load_all_tracks, load_hash_expr},
         types::{AlbumMeta, AudioTrack, CurrentTrack, LibraryClient, RepeatMode},
     },
     dotfile::DotfileSchema,
@@ -173,29 +173,20 @@ impl PlayableClient for LibraryClient {
 
             let (tx, rx) = oneshot::channel();
 
+            let inner_hash_handle = self.hash_handle.clone();
             self.hash_handle.spawn(async move {
                 let now = Instant::now();
                 let lib_root = DotfileSchema::parse()?.library_root()?;
-                { // OLD CODE
-                     // load_all_tracks_raw(lib_root, self_arc.clone(), hard_update).await?;
-                     // inject_metadata(self_arc.clone(), hash_handle.clone()).await?;
-                     // inject_hash(self_arc.clone(), hash_handle.clone(), true).await?;
-                     // load_albums(self_arc.clone())?;
-                }
 
-                // NEW CODE USING LOADING THEN ADDING TO ALBUM BTREE
-                load_all_tracks_expr(&lib_root, self_arc.clone()).await?;
+                load_all_tracks(&lib_root, self_arc.clone()).await?;
 
-                if let Ok(mut lib) = self_arc.lock() {
-                    // TODO: check for index drift
-                    lib.set_loading(false);
-                }
+                self_arc.lock().map(|mut lib| lib.set_loading(false))?;
 
                 let elapsed = now.elapsed().as_millis();
-                if tx.send(true).is_err() {
-                    info!("oneshot channel dropped");
+                match tx.send(true).is_err() {
+                    false => info!("hashing_rt total load: {elapsed} ms"),
+                    true => info!("oneshot channel dropped"),
                 }
-                info!("hashing_rt total load: {elapsed} ms");
                 Ok::<(), AppError>(())
             });
 
@@ -204,8 +195,7 @@ impl PlayableClient for LibraryClient {
             self.hash_handle.spawn(async move {
                 if let Ok(true) = rx.await {
                     info!("begin hashing update");
-                    // FIX: this blocks playback state
-                    load_hash_expr(self_arc_2nd.clone()).await?;
+                    load_hash_expr(self_arc_2nd.clone(), inner_hash_handle).await?;
                     hash_cleanup(self_arc_2nd.clone())?;
                 }
                 Ok::<(), AppError>(())

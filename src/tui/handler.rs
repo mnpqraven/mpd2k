@@ -38,10 +38,10 @@ fn resolve_key_universal<Client: PlayableClient>(
                     app.client.update_lib(true)?;
                 }
             }
-
+            // taggling playback state
             KeyCode::Char('r') => app.client.get()?.cycle_repeat(),
             KeyCode::Char('z') => app.client.get()?.toggle_shuffle(),
-
+            // navigation
             KeyCode::Char('1') => app.navigate(NavigationRoute::Playback),
             KeyCode::Char('2') => app.navigate(NavigationRoute::LibraryTree),
             KeyCode::Char('3') => app.navigate(NavigationRoute::Config),

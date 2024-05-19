@@ -3,10 +3,7 @@ use crate::backend::library::types::AudioTrack;
 use crate::error::AppError;
 use rodio::{OutputStream, OutputStreamHandle, Sink};
 use std::sync::Arc;
-use tokio::{
-    runtime::Handle,
-    sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
-};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::info;
 
 #[derive(Debug, PartialEq)]

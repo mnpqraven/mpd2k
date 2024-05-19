@@ -8,12 +8,12 @@ use std::{
     path::Path,
     sync::{Arc, Mutex},
 };
-use tokio::task::JoinSet;
+use tokio::{runtime::Handle, task::JoinSet};
 use tracing::{error, info, instrument};
 use walkdir::WalkDir;
 
 #[instrument]
-pub async fn load_all_tracks_expr<P: AsRef<Path> + Debug>(
+pub async fn load_all_tracks<P: AsRef<Path> + Debug>(
     lib_root: P,
     lib_arc: Arc<Mutex<LibraryClient>>,
     // TODO: impl hard_update
@@ -60,7 +60,10 @@ pub async fn load_all_tracks_expr<P: AsRef<Path> + Debug>(
     Ok(())
 }
 
-pub async fn load_hash_expr(lib_arc: Arc<Mutex<LibraryClient>>) -> Result<(), AppError> {
+pub async fn load_hash_expr(
+    lib_arc: Arc<Mutex<LibraryClient>>,
+    handle: Handle,
+) -> Result<(), AppError> {
     let _permit = HASH_SEMAPHORE.acquire().await.unwrap();
 
     let arc_outer = lib_arc.clone();
@@ -84,10 +87,15 @@ pub async fn load_hash_expr(lib_arc: Arc<Mutex<LibraryClient>>) -> Result<(), Ap
 
         for path in paths {
             let meta_arc_inner = meta_arc.clone();
-            join_set.spawn(async move {
-                let hash = hash_file(path.as_ref(), super::HashKind::XxHash)?;
-                Ok::<(Arc<AlbumMeta>, Arc<str>, String), AppError>((meta_arc_inner, path, hash))
-            });
+
+            // NOTE: this handle specification is important
+            join_set.spawn_on(
+                async move {
+                    let hash = hash_file(path.as_ref(), super::HashKind::XxHash)?;
+                    Ok::<(Arc<AlbumMeta>, Arc<str>, String), AppError>((meta_arc_inner, path, hash))
+                },
+                &handle,
+            );
         }
     }
 
@@ -96,7 +104,6 @@ pub async fn load_hash_expr(lib_arc: Arc<Mutex<LibraryClient>>) -> Result<(), Ap
         let meta_ref = meta.as_ref().to_owned();
         let p = path.to_string();
         info!(?meta_ref, p, hash);
-        info!("locking");
         let mut lib = lib_arc.lock()?;
         if let Some(tracks) = lib.albums.get_mut(&meta) {
             for track in tracks {
@@ -105,7 +112,6 @@ pub async fn load_hash_expr(lib_arc: Arc<Mutex<LibraryClient>>) -> Result<(), Ap
                 }
             }
         }
-        info!("unlocking");
     }
 
     Ok(())
